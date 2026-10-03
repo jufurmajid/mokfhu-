@@ -61,6 +61,13 @@ jobs:
           cache: true
           verbose: true
 
+      - name: Stage exported APK
+        shell: bash
+        run: |
+          mkdir -p game/builds/android
+          cp "$HOME/.local/share/godot/builds/Android/Mokfhu.apk" game/builds/android/Mokfhu.apk
+          test -s game/builds/android/Mokfhu.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

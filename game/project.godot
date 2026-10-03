@@ -1,0 +1,35 @@
+; Engine configuration file.
+; Mokfhu - mobile field combat prototype
+config_version=5
+
+[application]
+config/name="Mokfhu: Field Combat"
+run/main_scene="res://scenes/field.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/handheld/orientation=4
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+environment/defaults/default_clear_color=Color(0.38, 0.42, 0.39, 1)
+lights_and_shadows/directional_shadow/size=1024
+
+[physics]
+3d/default_gravity=9.8
+
+[audio]
+driver/enable_input=false
+
+[input]
+move_left={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":65),Object(InputEventKey,"physical_keycode":4194311)]}
+move_right={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":68),Object(InputEventKey,"physical_keycode":4194313)]}
+move_forward={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":87),Object(InputEventKey,"physical_keycode":4194320)]}
+move_back={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":83),Object(InputEventKey,"physical_keycode":4194322)]}
+reload={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":82)]}
+fire={"deadzone":0.2,"events":[Object(InputEventMouseButton,"button_index":1)]}

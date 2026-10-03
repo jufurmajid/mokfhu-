@@ -128,7 +128,7 @@ func _input(event: InputEvent) -> void:
 				look_touch = -1
 	elif event is InputEventScreenDrag:
 		if event.index == move_touch:
-			var delta := (event.position - move_origin) / 75.0
+			var delta: Vector2 = (event.position - move_origin) / 75.0
 			move_changed.emit(Vector2(clampf(delta.x, -1, 1), clampf(delta.y, -1, 1)))
 		elif event.index == look_touch:
 			look_delta.emit(event.relative * 0.004)

@@ -1,9 +1,7 @@
 name: Requested Android APK export
 
 on:
-  push:
-    branches:
-      - build/apk-20261004
+  workflow_dispatch:
 
 jobs:
   export-apk:

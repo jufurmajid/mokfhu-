@@ -7,6 +7,8 @@ on:
 
 jobs:
   export-apk:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Check out project
@@ -67,6 +69,16 @@ jobs:
           mkdir -p game/builds/android
           cp "$HOME/.local/share/godot/builds/Android/Mokfhu.apk" game/builds/android/Mokfhu.apk
           test -s game/builds/android/Mokfhu.apk
+
+      - name: Publish direct APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create mokfhu-android-20261004 game/builds/android/Mokfhu.apk \\
+            --repo "$GITHUB_REPOSITORY" \\
+            --target "$GITHUB_SHA" \\
+            --title "Mokfhu Android APK" \\
+            --notes "Android ARM64 debug build of Mokfhu."
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

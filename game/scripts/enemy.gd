@@ -96,6 +96,8 @@ func _die(hit_position: Vector3, hit_direction: Vector3) -> void:
 	ragdoll.mass = 38.0
 	ragdoll.linear_damp = 2.8
 	ragdoll.angular_damp = 3.5
+	ragdoll.collision_layer = 4
+	ragdoll.collision_mask = 1
 	add_child(ragdoll)
 	var rag_shape := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
@@ -125,6 +127,8 @@ func _die(hit_position: Vector3, hit_direction: Vector3) -> void:
 		limb.mass = 5.0 if spec.name.contains("Leg") else 2.2
 		limb.linear_damp = 3.4
 		limb.angular_damp = 4.2
+		limb.collision_layer = 4
+		limb.collision_mask = 1
 		var limb_shape := CollisionShape3D.new()
 		var limb_capsule := CapsuleShape3D.new()
 		limb_capsule.radius = spec.radius

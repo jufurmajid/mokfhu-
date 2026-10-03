@@ -22,15 +22,17 @@ func _ready() -> void:
 	player.name = "Player"
 	player.set_script(PLAYER_SCRIPT)
 	player.set("combat_audio", combat_audio)
-	player.position = Vector3(0, 1.1, 12)
+	player.position = Vector3(0, 0.05, 12)
 	add_child(player)
 	hud = HUD_SCRIPT.new()
 	hud.name = "MobileHUD"
 	add_child(hud)
 	hud.fire_requested.connect(player.request_fire)
 	hud.reload_requested.connect(player.reload)
+	hud.volume_changed.connect(combat_audio.set_master_volume)
 	hud.move_changed.connect(player.set_touch_move)
 	hud.look_delta.connect(player.add_touch_look)
+	combat_audio.set_master_volume(0.85)
 	player.connect("health_changed", Callable(hud, "set_health"))
 	player.connect("ammo_changed", Callable(hud, "set_ammo"))
 	player.connect("died", Callable(self, "_on_player_died"))

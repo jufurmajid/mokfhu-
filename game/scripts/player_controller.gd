@@ -16,6 +16,7 @@ var shot_cooldown := 0.0
 var reloading := false
 var reload_timer := 0.0
 var recoil := 0.0
+var flash_timer := 0.0
 var combat_audio: Node
 var camera: Camera3D
 var weapon: Node3D
@@ -60,10 +61,13 @@ func _build_weapon(parent: Node3D) -> void:
 	weapon.add_child(body)
 	var stock := MeshInstance3D.new()
 	var stock_mesh := BoxMesh.new()
-	stock_mesh.size = Vector3(0.1, 0.12, 0.28)
-	stock_mesh.material = dark
+	stock_mesh.size = Vector3(0.12, 0.15, 0.34)
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color("684b32")
+	wood.roughness = 0.82
+	stock_mesh.material = wood
 	stock.mesh = stock_mesh
-	stock.position.z = 0.38
+	stock.position = Vector3(0, -0.015, 0.43)
 	weapon.add_child(stock)
 	var magazine_mesh := MeshInstance3D.new()
 	var mag := BoxMesh.new()
@@ -73,6 +77,29 @@ func _build_weapon(parent: Node3D) -> void:
 	magazine_mesh.position = Vector3(0, -0.17, 0.05)
 	magazine_mesh.rotation.x = -0.12
 	weapon.add_child(magazine_mesh)
+	var magazine_tip := MeshInstance3D.new()
+	var mag_tip_mesh := BoxMesh.new()
+	mag_tip_mesh.size = Vector3(0.09, 0.11, 0.13)
+	mag_tip_mesh.material = dark
+	magazine_tip.mesh = mag_tip_mesh
+	magazine_tip.position = Vector3(0, -0.32, 0.12)
+	magazine_tip.rotation.x = -0.35
+	weapon.add_child(magazine_tip)
+	var handguard := MeshInstance3D.new()
+	var guard_mesh := BoxMesh.new()
+	guard_mesh.size = Vector3(0.16, 0.12, 0.25)
+	guard_mesh.material = wood
+	handguard.mesh = guard_mesh
+	handguard.position.z = -0.27
+	weapon.add_child(handguard)
+	var grip := MeshInstance3D.new()
+	var grip_mesh := BoxMesh.new()
+	grip_mesh.size = Vector3(0.09, 0.22, 0.13)
+	grip_mesh.material = wood
+	grip.mesh = grip_mesh
+	grip.position = Vector3(0, -0.16, 0.16)
+	grip.rotation.x = -0.2
+	weapon.add_child(grip)
 	var barrel := MeshInstance3D.new()
 	var barrel_mesh := CylinderMesh.new()
 	barrel_mesh.top_radius = 0.025
@@ -83,12 +110,24 @@ func _build_weapon(parent: Node3D) -> void:
 	barrel.rotation.x = PI / 2
 	barrel.position.z = -0.47
 	weapon.add_child(barrel)
+	var flash := OmniLight3D.new()
+	flash.name = "MuzzleFlash"
+	flash.position = Vector3(0, 0, -0.68)
+	flash.light_color = Color("ffcf84")
+	flash.light_energy = 0.0
+	flash.omni_range = 3.0
+	flash.shadow_enabled = false
+	weapon.add_child(flash)
 
 func _process(delta: float) -> void:
 	shot_cooldown = maxf(0.0, shot_cooldown - delta)
 	if recoil > 0.0:
 		recoil = move_toward(recoil, 0.0, delta * 3.2)
 		weapon.position.y = -0.27 + recoil * 0.06
+	if flash_timer > 0.0:
+		flash_timer -= delta
+		if flash_timer <= 0.0:
+			weapon.get_node("MuzzleFlash").light_energy = 0.0
 	if reloading:
 		reload_timer -= delta
 		weapon.rotation.x = lerpf(weapon.rotation.x, -0.6, delta * 5.0)
@@ -152,6 +191,8 @@ func request_fire() -> void:
 	shot_cooldown = 0.105
 	recoil = minf(1.0, recoil + 0.58)
 	weapon.rotation.x = -recoil * 0.06
+	weapon.get_node("MuzzleFlash").light_energy = 1.6
+	flash_timer = 0.045
 	_ammo_signal()
 	combat_audio.call("play_player_shot", camera.global_position)
 	var space := get_world_3d().direct_space_state

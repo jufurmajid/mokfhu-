@@ -17,6 +17,7 @@ Desktop testing uses WASD or arrow keys, mouse look, left mouse to fire, and R t
 - Five hostile soldiers with two uniform color variants, simple approach/strafe behavior, hits, and low-cost physics ragdolls.
 - Mobile touch controls plus desktop test controls.
 - Player, reserve ammunition, and remaining-enemy HUD.
+- On-screen sound volume cycle with mute.
 - Spatial gunfire with smooth distance-layer blending and a capped number of active audio voices.
 - Enemy projectiles that can deal damage or trigger a directional near-miss flyby.
 - Android-focused landscape setup and Godot Compatibility renderer for mid-range devices.

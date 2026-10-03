@@ -1,6 +1,7 @@
 extends CanvasLayer
 signal fire_requested
 signal reload_requested
+signal volume_changed(value: float)
 signal move_changed(value: Vector2)
 signal look_delta(value: Vector2)
 
@@ -13,6 +14,9 @@ var move_touch := -1
 var look_touch := -1
 var fire_held := false
 var fire_timer := 0.0
+var volume_levels := [0.85, 0.55, 0.28, 0.0]
+var volume_labels := ["الصوت 85%", "الصوت 55%", "الصوت 28%", "الصوت مغلق"]
+var volume_index := 0
 
 func _ready() -> void:
 	_build_ui()
@@ -43,6 +47,14 @@ func _build_ui() -> void:
 	mission.add_theme_font_size_override("font_size", 19)
 	mission.add_theme_color_override("font_color", Color("eee9d8"))
 	root.add_child(mission)
+	var sound_button := Button.new()
+	sound_button.text = volume_labels[volume_index]
+	sound_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	sound_button.position = Vector2(-160, 18)
+	sound_button.size = Vector2(142, 42)
+	sound_button.add_theme_font_size_override("font_size", 14)
+	sound_button.pressed.connect(_cycle_volume.bind(sound_button))
+	root.add_child(sound_button)
 	health_bar = ProgressBar.new()
 	health_bar.position = Vector2(24, 54)
 	health_bar.size = Vector2(205, 20)
@@ -127,6 +139,11 @@ func _start_fire() -> void:
 
 func _stop_fire() -> void:
 	fire_held = false
+
+func _cycle_volume(button: Button) -> void:
+	volume_index = (volume_index + 1) % volume_levels.size()
+	button.text = volume_labels[volume_index]
+	volume_changed.emit(volume_levels[volume_index])
 
 func set_health(value: int) -> void:
 	if is_instance_valid(health_bar):

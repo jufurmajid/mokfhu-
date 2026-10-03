@@ -5,6 +5,7 @@ config_version=5
 [application]
 config/name="Mokfhu: Field Combat"
 run/main_scene="res://scenes/field.tscn"
+run/max_fps=60
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
 [display]

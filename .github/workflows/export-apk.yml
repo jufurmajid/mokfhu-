@@ -59,6 +59,7 @@ jobs:
           export_debug: true
           use_preset_export_path: true
           cache: true
+          verbose: true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

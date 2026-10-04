@@ -6,6 +6,8 @@ signal died
 const GRAVITY := 18.0
 const WALK_SPEED := 5.2
 const RELOAD_SECONDS := 1.45
+const WEAPON_REST_POSITION := Vector3(0.29, -0.27, -0.52)
+
 var health := 100
 var magazine := 30
 var reserve_ammo := 120
@@ -17,9 +19,12 @@ var reloading := false
 var reload_timer := 0.0
 var recoil := 0.0
 var flash_timer := 0.0
+var walk_bob_time := 0.0
 var combat_audio: Node
 var camera: Camera3D
 var weapon: Node3D
+var magazine_root: Node3D
+var bolt_handle: MeshInstance3D
 var hud: CanvasLayer
 
 func _ready() -> void:
@@ -47,7 +52,7 @@ func _ready() -> void:
 
 func _build_weapon(parent: Node3D) -> void:
 	weapon = Node3D.new()
-	weapon.position = Vector3(0.29, -0.27, -0.52)
+	weapon.position = WEAPON_REST_POSITION
 	parent.add_child(weapon)
 	# Sleeved arms and gloves connect the rifle to the view so it no longer floats.
 	var sleeve := StandardMaterial3D.new()
@@ -89,13 +94,16 @@ func _build_weapon(parent: Node3D) -> void:
 	_weapon_box("StockButtPlate", Vector3(0.13, 0.17, 0.035), Vector3(0, -0.025, 0.535), dark)
 	_weapon_box("PistolGrip", Vector3(0.09, 0.22, 0.12), Vector3(0, -0.18, 0.13), wood, Vector3(-0.18, 0.0, 0.12))
 	_weapon_capsule("WoodHandguard", 0.083, 0.34, Vector3(0, -0.005, -0.43), wood, Vector3(PI / 2.0, 0.0, 0.0))
-	# The segmented forward bend gives the magazine the distinctive curved AK profile.
+	# Grouping the magazine lets the reload visibly remove and re-seat it.
+	magazine_root = Node3D.new()
+	magazine_root.name = "Magazine"
+	weapon.add_child(magazine_root)
 	var mag_offsets := [Vector3(0, -0.14, 0.045), Vector3(0, -0.22, 0.075), Vector3(0, -0.30, 0.12), Vector3(0, -0.37, 0.17)]
 	for index in mag_offsets.size():
 		var segment_size := Vector3(0.102, 0.105, 0.145)
-		var segment := _weapon_box("CurvedMagazine_%d" % index, segment_size, mag_offsets[index], dark)
+		var segment := _weapon_box("CurvedMagazine_%d" % index, segment_size, mag_offsets[index], dark, Vector3.ZERO, magazine_root)
 		segment.rotation.x = -0.12 - float(index) * 0.09
-	_weapon_box("MagazineBase", Vector3(0.106, 0.045, 0.13), Vector3(0, -0.425, 0.205), dark, Vector3(-0.40, 0.0, 0.0))
+	_weapon_box("MagazineBase", Vector3(0.106, 0.045, 0.13), Vector3(0, -0.425, 0.205), dark, Vector3(-0.40, 0.0, 0.0), magazine_root)
 	_weapon_box("TriggerBlock", Vector3(0.055, 0.11, 0.10), Vector3(0, -0.105, 0.115), dark)
 	_weapon_cylinder("Barrel", 0.026, 0.62, Vector3(0, 0.02, -0.72), dark)
 	_weapon_cylinder("GasTube", 0.033, 0.36, Vector3(0, 0.145, -0.43), dark)
@@ -104,7 +112,7 @@ func _build_weapon(parent: Node3D) -> void:
 	_weapon_box("FrontSightPost", Vector3(0.025, 0.12, 0.03), Vector3(0, 0.205, -0.84), dark)
 	_weapon_box("RearSightBase", Vector3(0.14, 0.055, 0.075), Vector3(0, 0.13, -0.10), dark)
 	_weapon_box("RearSightNotch", Vector3(0.045, 0.035, 0.04), Vector3(0, 0.175, -0.10), dark)
-	_weapon_box("BoltHandle", Vector3(0.10, 0.045, 0.045), Vector3(0.105, 0.035, -0.02), dark)
+	bolt_handle = _weapon_box("BoltHandle", Vector3(0.10, 0.045, 0.045), Vector3(0.105, 0.035, -0.02), dark)
 	var flash := OmniLight3D.new()
 	flash.name = "MuzzleFlash"
 	flash.position = Vector3(0, 0.02, -1.10)
@@ -114,7 +122,7 @@ func _build_weapon(parent: Node3D) -> void:
 	flash.shadow_enabled = false
 	weapon.add_child(flash)
 
-func _weapon_box(label: String, size: Vector3, position: Vector3, material: Material, rotation: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+func _weapon_box(label: String, size: Vector3, position: Vector3, material: Material, rotation: Vector3 = Vector3.ZERO, parent_node: Node3D = null) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
 	part.name = label
 	var mesh := BoxMesh.new()
@@ -123,7 +131,8 @@ func _weapon_box(label: String, size: Vector3, position: Vector3, material: Mate
 	part.position = position
 	part.rotation = rotation
 	part.material_override = material
-	weapon.add_child(part)
+	var target_parent: Node3D = parent_node if parent_node != null else weapon
+	target_parent.add_child(part)
 	return part
 
 func _weapon_cylinder(label: String, radius: float, height: float, position: Vector3, material: Material) -> MeshInstance3D:
@@ -155,28 +164,68 @@ func _weapon_capsule(label: String, radius: float, height: float, position: Vect
 
 func _process(delta: float) -> void:
 	shot_cooldown = maxf(0.0, shot_cooldown - delta)
-	if recoil > 0.0:
-		recoil = move_toward(recoil, 0.0, delta * 3.2)
-		weapon.position.y = -0.27 + recoil * 0.06
+	recoil = move_toward(recoil, 0.0, delta * 7.5)
 	if flash_timer > 0.0:
 		flash_timer -= delta
 		if flash_timer <= 0.0:
-			weapon.get_node("MuzzleFlash").light_energy = 0.0
+			var muzzle_flash := weapon.get_node_or_null("MuzzleFlash") as OmniLight3D
+			if muzzle_flash:
+				muzzle_flash.light_energy = 0.0
 	if reloading:
 		reload_timer -= delta
-		weapon.rotation.x = lerpf(weapon.rotation.x, -0.6, delta * 5.0)
 		if reload_timer <= 0.0:
 			var needed: int = 30 - magazine
 			var loaded: int = mini(needed, reserve_ammo)
 			magazine += loaded
 			reserve_ammo -= loaded
 			reloading = false
-			weapon.rotation.x = 0.0
+			reload_timer = 0.0
 			_ammo_signal()
+	_animate_weapon(delta)
 	if Input.is_action_just_pressed("reload"):
 		reload()
 	if Input.is_action_just_pressed("fire"):
 		request_fire()
+
+func _animate_weapon(delta: float) -> void:
+	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var move_strength := clampf(horizontal_speed / WALK_SPEED, 0.0, 1.0)
+	if move_strength > 0.05 and is_on_floor():
+		walk_bob_time += delta * 9.0
+	var bob := Vector3.ZERO
+	if not reloading:
+		bob.x = sin(walk_bob_time) * 0.008 * move_strength
+		bob.y = abs(cos(walk_bob_time * 2.0)) * 0.010 * move_strength
+	var target_position := WEAPON_REST_POSITION + bob + Vector3(0, -recoil * 0.012, recoil * 0.045)
+	var target_rotation := Vector3(-recoil * 0.085, recoil * 0.018, -recoil * 0.012)
+	var reload_progress := 0.0
+	if reloading:
+		reload_progress = clampf(1.0 - reload_timer / RELOAD_SECONDS, 0.0, 1.0)
+		var arc := sin(reload_progress * PI)
+		target_position += Vector3(0.05 * arc, -0.035 * arc, 0.08 * arc)
+		target_rotation += Vector3(-0.32 - 0.42 * arc, 0.20 * arc, 0.32 * arc)
+	weapon.position = weapon.position.lerp(target_position, clampf(delta * 18.0, 0.0, 1.0))
+	weapon.rotation = weapon.rotation.lerp(target_rotation, clampf(delta * 18.0, 0.0, 1.0))
+	_animate_magazine_and_bolt(reload_progress)
+
+func _animate_magazine_and_bolt(reload_progress: float) -> void:
+	if is_instance_valid(magazine_root):
+		var mag_drop := 0.0
+		if reloading:
+			if reload_progress < 0.42:
+				mag_drop = smoothstep(0.10, 0.42, reload_progress)
+			elif reload_progress < 0.60:
+				mag_drop = 1.0
+			else:
+				mag_drop = 1.0 - smoothstep(0.60, 0.82, reload_progress)
+		magazine_root.position = Vector3(0.05 * mag_drop, -0.30 * mag_drop, 0.12 * mag_drop)
+		magazine_root.rotation = Vector3(0.35 * mag_drop, 0.0, 0.26 * mag_drop)
+	if is_instance_valid(bolt_handle):
+		var bolt_cycle := recoil
+		if reloading and reload_progress > 0.80:
+			var bolt_t := clampf((reload_progress - 0.80) / 0.17, 0.0, 1.0)
+			bolt_cycle = maxf(bolt_cycle, sin(bolt_t * PI))
+		bolt_handle.position = Vector3(0.105, 0.035, -0.02 + 0.085 * bolt_cycle)
 
 func _physics_process(delta: float) -> void:
 	if health <= 0:
@@ -223,9 +272,10 @@ func request_fire() -> void:
 		return
 	magazine -= 1
 	shot_cooldown = 0.105
-	recoil = minf(1.0, recoil + 0.58)
-	weapon.rotation.x = -recoil * 0.06
-	weapon.get_node("MuzzleFlash").light_energy = 1.6
+	recoil = 1.0
+	var muzzle_flash := weapon.get_node_or_null("MuzzleFlash") as OmniLight3D
+	if muzzle_flash:
+		muzzle_flash.light_energy = randf_range(1.5, 2.0)
 	flash_timer = 0.045
 	_ammo_signal()
 	combat_audio.call("play_player_shot", camera.global_position)

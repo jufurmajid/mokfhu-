@@ -9,17 +9,30 @@ var shoot_timer := randf_range(1.0, 2.8)
 var move_phase := randf() * TAU
 var is_dead := false
 var body_mesh: MeshInstance3D
+var visual_root: Node3D
+var body_collision: CollisionShape3D
+var left_leg: MeshInstance3D
+var right_leg: MeshInstance3D
+var left_arm: MeshInstance3D
+var right_arm: MeshInstance3D
+var muzzle_flash: OmniLight3D
+var walk_cycle := randf() * TAU
+var fire_kick := 0.0
+var flash_timer := 0.0
 
 func _ready() -> void:
 	collision_layer = 1
 	collision_mask = 1
-	var hitbox := CollisionShape3D.new()
+	body_collision = CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.38
 	shape.height = 1.75
-	hitbox.shape = shape
-	hitbox.position.y = 0.9
-	add_child(hitbox)
+	body_collision.shape = shape
+	body_collision.position.y = 0.9
+	add_child(body_collision)
+	visual_root = Node3D.new()
+	visual_root.name = "Visual"
+	add_child(visual_root)
 	_build_soldier()
 
 func _build_soldier() -> void:
@@ -32,11 +45,11 @@ func _build_soldier() -> void:
 	_part("HelmetRim", Vector3(0.44, 0.045, 0.36), Vector3(0, 1.72, -0.025), Color("343a32"), false)
 	_capsule_part("Face", 0.15, 0.27, Vector3(0, 1.55, -0.018), Color("947d62"))
 	_capsule_part("Pack", 0.17, 0.50, Vector3(0, 1.18, 0.22), Color("484e40"))
-	_capsule_part("LeftLeg", 0.105, 0.62, Vector3(-0.15, 0.46, 0), uniform.darkened(0.16))
-	_capsule_part("RightLeg", 0.105, 0.62, Vector3(0.15, 0.46, 0), uniform.darkened(0.16))
-	var left_arm := _capsule_part("LeftArm", 0.095, 0.62, Vector3(-0.34, 1.09, -0.10), uniform)
+	left_leg = _capsule_part("LeftLeg", 0.105, 0.62, Vector3(-0.15, 0.46, 0), uniform.darkened(0.16))
+	right_leg = _capsule_part("RightLeg", 0.105, 0.62, Vector3(0.15, 0.46, 0), uniform.darkened(0.16))
+	left_arm = _capsule_part("LeftArm", 0.095, 0.62, Vector3(-0.34, 1.09, -0.10), uniform)
 	left_arm.rotation.z = -0.38
-	var right_arm := _capsule_part("RightArm", 0.095, 0.62, Vector3(0.34, 1.09, -0.17), uniform)
+	right_arm = _capsule_part("RightArm", 0.095, 0.62, Vector3(0.34, 1.09, -0.17), uniform)
 	right_arm.rotation.z = 0.38
 	# Two pouches and an AK-like weapon profile break up the silhouette without adding heavy assets.
 	_part("PouchL", Vector3(0.12, 0.16, 0.11), Vector3(-0.13, 0.98, -0.19), Color("5a503b"), true)
@@ -44,6 +57,14 @@ func _build_soldier() -> void:
 	_part("RifleReceiver", Vector3(0.10, 0.12, 0.36), Vector3(0.28, 1.12, -0.31), Color("242722"), true)
 	_capsule_part("RifleBarrel", 0.025, 0.50, Vector3(0.28, 1.13, -0.69), Color("20231f"))
 	_part("RifleStock", Vector3(0.09, 0.11, 0.26), Vector3(0.28, 1.12, 0.01), Color("684b32"), true)
+	muzzle_flash = OmniLight3D.new()
+	muzzle_flash.name = "MuzzleFlash"
+	muzzle_flash.position = Vector3(0.28, 1.13, -0.96)
+	muzzle_flash.light_color = Color("ffbd72")
+	muzzle_flash.light_energy = 0.0
+	muzzle_flash.omni_range = 2.3
+	muzzle_flash.shadow_enabled = false
+	visual_root.add_child(muzzle_flash)
 
 func _part(label: String, size: Vector3, pos: Vector3, tint: Color, rounded: bool = false) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
@@ -63,7 +84,7 @@ func _part(label: String, size: Vector3, pos: Vector3, tint: Color, rounded: boo
 	material.albedo_color = tint
 	material.roughness = 0.92
 	part.material_override = material
-	add_child(part)
+	visual_root.add_child(part)
 	return part
 
 func _capsule_part(label: String, radius: float, height: float, pos: Vector3, tint: Color) -> MeshInstance3D:
@@ -78,8 +99,38 @@ func _capsule_part(label: String, radius: float, height: float, pos: Vector3, ti
 	material.albedo_color = tint
 	material.roughness = 0.94
 	part.material_override = material
-	add_child(part)
+	visual_root.add_child(part)
 	return part
+
+func _process(delta: float) -> void:
+	if is_dead:
+		return
+	fire_kick = move_toward(fire_kick, 0.0, delta * 7.0)
+	if flash_timer > 0.0:
+		flash_timer -= delta
+		if flash_timer <= 0.0 and is_instance_valid(muzzle_flash):
+			muzzle_flash.light_energy = 0.0
+	_animate_soldier(delta)
+
+func _animate_soldier(delta: float) -> void:
+	if not is_instance_valid(visual_root):
+		return
+	var move_speed := Vector2(velocity.x, velocity.z).length()
+	var move_strength := clampf(move_speed / 2.3, 0.0, 1.0)
+	if move_strength > 0.05:
+		walk_cycle += delta * 7.4
+	var swing := sin(walk_cycle) * 0.52 * move_strength
+	if is_instance_valid(left_leg):
+		left_leg.rotation.x = swing
+	if is_instance_valid(right_leg):
+		right_leg.rotation.x = -swing
+	if is_instance_valid(left_arm):
+		left_arm.rotation.x = -swing * 0.20 - fire_kick * 0.10
+	if is_instance_valid(right_arm):
+		right_arm.rotation.x = swing * 0.14 - fire_kick * 0.18
+	visual_root.position.y = abs(sin(walk_cycle * 2.0)) * 0.035 * move_strength
+	visual_root.rotation.x = -fire_kick * 0.045
+	visual_root.rotation.z = sin(walk_cycle) * 0.018 * move_strength
 
 func _physics_process(delta: float) -> void:
 	if is_dead or not is_instance_valid(player) or int(player.get("health")) <= 0:
@@ -106,6 +157,10 @@ func _physics_process(delta: float) -> void:
 func _fire_at_player() -> void:
 	var muzzle := global_position + Vector3(0, 1.28, 0) - global_transform.basis.z * 0.55
 	combat_audio.call("play_enemy_shot", muzzle, player.global_position)
+	fire_kick = 1.0
+	if is_instance_valid(muzzle_flash):
+		muzzle_flash.light_energy = randf_range(0.9, 1.35)
+	flash_timer = 0.05
 	var projectile := Node3D.new()
 	projectile.set_script(PROJECTILE_SCRIPT)
 	projectile.position = muzzle
@@ -124,7 +179,10 @@ func take_damage(amount: int, hit_position: Vector3, hit_direction: Vector3) -> 
 func _die(hit_position: Vector3, hit_direction: Vector3) -> void:
 	is_dead = true
 	set_physics_process(false)
-	body_mesh.visible = false
+	if is_instance_valid(visual_root):
+		visual_root.visible = false
+	if is_instance_valid(body_collision):
+		body_collision.set_deferred("disabled", true)
 	var ragdoll := RigidBody3D.new()
 	ragdoll.name = "Ragdoll"
 	ragdoll.position = Vector3(0, 1.0, 0)
@@ -192,11 +250,6 @@ func _die(hit_position: Vector3, hit_direction: Vector3) -> void:
 		joint.node_a = joint.get_path_to(parts[0])
 		joint.node_b = joint.get_path_to(parts[index])
 	ragdoll.apply_impulse(hit_direction.normalized() * 1.4 + Vector3.UP * 0.45, hit_position - ragdoll.global_position)
-	for node in get_children():
-		if node is MeshInstance3D and node != body_mesh:
-			node.visible = false
-		if node is CollisionShape3D and node != rag_shape:
-			node.disabled = true
 	var cleanup := get_tree().create_timer(7.0)
 	cleanup.timeout.connect(queue_free)
 	died.emit(self)

@@ -2,135 +2,131 @@ extends CharacterBody3D
 signal died(enemy: Node3D)
 
 const PROJECTILE_SCRIPT = preload("res://scripts/projectile.gd")
+const ENEMY_MODEL_PATH := "res://vendor/enemy/enemy.glb"
+const MOVE_SPEED := 2.45
+
 var player: Node3D
 var combat_audio: Node
 var health := 100
-var shoot_timer := randf_range(1.0, 2.8)
+var shoot_timer := randf_range(1.0, 2.5)
 var move_phase := randf() * TAU
 var is_dead := false
-var body_mesh: MeshInstance3D
-var visual_root: Node3D
 var body_collision: CollisionShape3D
-var left_leg: MeshInstance3D
-var right_leg: MeshInstance3D
-var left_arm: MeshInstance3D
-var right_arm: MeshInstance3D
+var visual_root: Node3D
+var visual_model: Node3D
+var animation_player: AnimationPlayer
 var muzzle_flash: OmniLight3D
-var walk_cycle := randf() * TAU
-var fire_kick := 0.0
 var flash_timer := 0.0
+var animation_locked := false
+var anim_idle := ""
+var anim_run := ""
+var anim_attack := ""
+var anim_death := ""
 
 func _ready() -> void:
 	collision_layer = 1
 	collision_mask = 1
 	body_collision = CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-	shape.radius = 0.38
-	shape.height = 1.75
+	shape.radius = 0.36
+	shape.height = 1.78
 	body_collision.shape = shape
 	body_collision.position.y = 0.9
 	add_child(body_collision)
-	visual_root = Node3D.new()
-	visual_root.name = "Visual"
-	add_child(visual_root)
-	_build_soldier()
 
-func _build_soldier() -> void:
-	var uniform := Color("555d4a") if randi() % 2 == 0 else Color("81735b")
-	# Rounded low-poly silhouette reads as a person at phone scale instead of a stack of boxes.
-	body_mesh = _capsule_part("Torso", 0.27, 0.76, Vector3(0, 1.12, 0), uniform)
-	var vest := _capsule_part("PlateCarrier", 0.285, 0.58, Vector3(0, 1.14, -0.055), uniform.darkened(0.12))
-	vest.scale = Vector3(1.0, 0.92, 0.82)
-	_part("Helmet", Vector3(0.37, 0.19, 0.34), Vector3(0, 1.78, 0), Color("454c40"), true)
-	_part("HelmetRim", Vector3(0.44, 0.045, 0.36), Vector3(0, 1.72, -0.025), Color("343a32"), false)
-	_capsule_part("Face", 0.15, 0.27, Vector3(0, 1.55, -0.018), Color("947d62"))
-	_capsule_part("Pack", 0.17, 0.50, Vector3(0, 1.18, 0.22), Color("484e40"))
-	left_leg = _capsule_part("LeftLeg", 0.105, 0.62, Vector3(-0.15, 0.46, 0), uniform.darkened(0.16))
-	right_leg = _capsule_part("RightLeg", 0.105, 0.62, Vector3(0.15, 0.46, 0), uniform.darkened(0.16))
-	left_arm = _capsule_part("LeftArm", 0.095, 0.62, Vector3(-0.34, 1.09, -0.10), uniform)
-	left_arm.rotation.z = -0.38
-	right_arm = _capsule_part("RightArm", 0.095, 0.62, Vector3(0.34, 1.09, -0.17), uniform)
-	right_arm.rotation.z = 0.38
-	# Two pouches and an AK-like weapon profile break up the silhouette without adding heavy assets.
-	_part("PouchL", Vector3(0.12, 0.16, 0.11), Vector3(-0.13, 0.98, -0.19), Color("5a503b"), true)
-	_part("PouchR", Vector3(0.12, 0.16, 0.11), Vector3(0.13, 0.98, -0.19), Color("5a503b"), true)
-	_part("RifleReceiver", Vector3(0.10, 0.12, 0.36), Vector3(0.28, 1.12, -0.31), Color("242722"), true)
-	_capsule_part("RifleBarrel", 0.025, 0.50, Vector3(0.28, 1.13, -0.69), Color("20231f"))
-	_part("RifleStock", Vector3(0.09, 0.11, 0.26), Vector3(0.28, 1.12, 0.01), Color("684b32"), true)
+	visual_root = Node3D.new()
+	visual_root.name = "AnimatedSoldierVisual"
+	add_child(visual_root)
+	_build_soldier_visual()
+
+func _build_soldier_visual() -> void:
+	var packed := load(ENEMY_MODEL_PATH) as PackedScene
+	if packed == null:
+		push_error("Animated enemy model is missing: %s" % ENEMY_MODEL_PATH)
+		return
+	visual_model = packed.instantiate() as Node3D
+	if visual_model == null:
+		push_error("Animated enemy model could not be instantiated")
+		return
+	visual_model.name = "VeteranSniper"
+	visual_model.rotation.y = PI
+	visual_root.add_child(visual_model)
+
+	animation_player = _find_animation_player(visual_model)
+	if animation_player:
+		anim_idle = _resolve_animation(["idle", "stand"])
+		anim_run = _resolve_animation(["run", "walk", "locomotion"])
+		anim_attack = _resolve_animation(["attack_ranged", "ranged", "shoot", "fire", "attack"])
+		anim_death = _resolve_animation(["death", "die", "dead"])
+		animation_player.animation_finished.connect(_on_animation_finished)
+		_play_animation(anim_idle, 0.0, 1.0, true)
+	else:
+		push_error("Animated enemy model has no AnimationPlayer")
+
 	muzzle_flash = OmniLight3D.new()
 	muzzle_flash.name = "MuzzleFlash"
-	muzzle_flash.position = Vector3(0.28, 1.13, -0.96)
-	muzzle_flash.light_color = Color("ffbd72")
+	muzzle_flash.position = Vector3(0.22, 1.25, -0.72)
+	muzzle_flash.light_color = Color("ffb762")
 	muzzle_flash.light_energy = 0.0
-	muzzle_flash.omni_range = 2.3
+	muzzle_flash.omni_range = 2.6
 	muzzle_flash.shadow_enabled = false
 	visual_root.add_child(muzzle_flash)
 
-func _part(label: String, size: Vector3, pos: Vector3, tint: Color, rounded: bool = false) -> MeshInstance3D:
-	var part := MeshInstance3D.new()
-	part.name = label
-	if rounded:
-		var mesh := SphereMesh.new()
-		mesh.radius = 0.5
-		mesh.height = 1.0
-		part.mesh = mesh
-		part.scale = size
-	else:
-		var mesh := BoxMesh.new()
-		mesh.size = size
-		part.mesh = mesh
-	part.position = pos
-	var material := StandardMaterial3D.new()
-	material.albedo_color = tint
-	material.roughness = 0.92
-	part.material_override = material
-	visual_root.add_child(part)
-	return part
+func _find_animation_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for child in node.get_children():
+		var found := _find_animation_player(child)
+		if found:
+			return found
+	return null
 
-func _capsule_part(label: String, radius: float, height: float, pos: Vector3, tint: Color) -> MeshInstance3D:
-	var part := MeshInstance3D.new()
-	part.name = label
-	var mesh := CapsuleMesh.new()
-	mesh.radius = radius
-	mesh.height = height
-	part.mesh = mesh
-	part.position = pos
-	var material := StandardMaterial3D.new()
-	material.albedo_color = tint
-	material.roughness = 0.94
-	part.material_override = material
-	visual_root.add_child(part)
-	return part
+func _resolve_animation(candidates: Array) -> String:
+	if not animation_player:
+		return ""
+	var names := animation_player.get_animation_list()
+	for candidate in candidates:
+		var needle := String(candidate).to_lower()
+		for name in names:
+			if String(name).to_lower() == needle:
+				return String(name)
+	for candidate in candidates:
+		var needle := String(candidate).to_lower()
+		for name in names:
+			if String(name).to_lower().contains(needle):
+				return String(name)
+	return ""
+
+func _play_animation(name: String, blend := 0.12, speed := 1.0, force := false) -> void:
+	if not animation_player or name.is_empty():
+		return
+	if force or String(animation_player.current_animation) != name:
+		animation_player.play(StringName(name), blend, speed)
+
+func _on_animation_finished(name: StringName) -> void:
+	var finished := String(name)
+	if finished == anim_attack:
+		animation_locked = false
+		_update_locomotion_animation(true)
+	elif finished == anim_death:
+		animation_locked = true
 
 func _process(delta: float) -> void:
-	if is_dead:
-		return
-	fire_kick = move_toward(fire_kick, 0.0, delta * 7.0)
 	if flash_timer > 0.0:
 		flash_timer -= delta
 		if flash_timer <= 0.0 and is_instance_valid(muzzle_flash):
 			muzzle_flash.light_energy = 0.0
-	_animate_soldier(delta)
+	if not is_dead:
+		_update_locomotion_animation()
 
-func _animate_soldier(delta: float) -> void:
-	if not is_instance_valid(visual_root):
+func _update_locomotion_animation(force := false) -> void:
+	if animation_locked or not animation_player:
 		return
 	var move_speed := Vector2(velocity.x, velocity.z).length()
-	var move_strength := clampf(move_speed / 2.3, 0.0, 1.0)
-	if move_strength > 0.05:
-		walk_cycle += delta * 7.4
-	var swing := sin(walk_cycle) * 0.52 * move_strength
-	if is_instance_valid(left_leg):
-		left_leg.rotation.x = swing
-	if is_instance_valid(right_leg):
-		right_leg.rotation.x = -swing
-	if is_instance_valid(left_arm):
-		left_arm.rotation.x = -swing * 0.20 - fire_kick * 0.10
-	if is_instance_valid(right_arm):
-		right_arm.rotation.x = swing * 0.14 - fire_kick * 0.18
-	visual_root.position.y = abs(sin(walk_cycle * 2.0)) * 0.035 * move_strength
-	visual_root.rotation.x = -fire_kick * 0.045
-	visual_root.rotation.z = sin(walk_cycle) * 0.018 * move_strength
+	if move_speed > 0.18 and not anim_run.is_empty():
+		_play_animation(anim_run, 0.16, 1.05, force)
+	elif not anim_idle.is_empty():
+		_play_animation(anim_idle, 0.18, 1.0, force)
 
 func _physics_process(delta: float) -> void:
 	if is_dead or not is_instance_valid(player) or int(player.get("health")) <= 0:
@@ -138,29 +134,39 @@ func _physics_process(delta: float) -> void:
 	shoot_timer -= delta
 	var to_player: Vector3 = player.global_position - global_position
 	var distance := to_player.length()
-	var flat := Vector3(to_player.x, 0, to_player.z).normalized()
-	if distance > 11.0:
-		velocity.x = flat.x * 2.3
-		velocity.z = flat.z * 2.3
+	var flat := Vector3(to_player.x, 0.0, to_player.z).normalized()
+
+	if distance > 12.0:
+		velocity.x = flat.x * MOVE_SPEED
+		velocity.z = flat.z * MOVE_SPEED
 	else:
-		move_phase += delta * 0.6
-		var strafe := Vector3(-flat.z, 0, flat.x) * sin(move_phase) * 0.75
+		move_phase += delta * 0.85
+		var strafe := Vector3(-flat.z, 0.0, flat.x) * sin(move_phase) * 1.0
 		velocity.x = strafe.x
 		velocity.z = strafe.z
+
 	look_at(Vector3(player.global_position.x, global_position.y, player.global_position.z), Vector3.UP)
-	velocity.y = -0.15
+	if not is_on_floor():
+		velocity.y -= 18.0 * delta
+	else:
+		velocity.y = -0.15
 	move_and_slide()
-	if shoot_timer <= 0.0 and distance < 48.0:
+
+	if shoot_timer <= 0.0 and distance < 52.0:
 		_fire_at_player()
-		shoot_timer = randf_range(1.4, 2.6)
+		shoot_timer = randf_range(1.35, 2.45)
 
 func _fire_at_player() -> void:
-	var muzzle := global_position + Vector3(0, 1.28, 0) - global_transform.basis.z * 0.55
-	combat_audio.call("play_enemy_shot", muzzle, player.global_position)
-	fire_kick = 1.0
+	var muzzle := global_position + Vector3(0, 1.28, 0) - global_transform.basis.z * 0.62
+	if is_instance_valid(combat_audio):
+		combat_audio.call("play_enemy_shot", muzzle, player.global_position)
+	if not anim_attack.is_empty():
+		animation_locked = true
+		_play_animation(anim_attack, 0.07, 1.0, true)
 	if is_instance_valid(muzzle_flash):
-		muzzle_flash.light_energy = randf_range(0.9, 1.35)
-	flash_timer = 0.05
+		muzzle_flash.light_energy = randf_range(1.0, 1.55)
+	flash_timer = 0.055
+
 	var projectile := Node3D.new()
 	projectile.set_script(PROJECTILE_SCRIPT)
 	projectile.position = muzzle
@@ -169,87 +175,27 @@ func _fire_at_player() -> void:
 	projectile.combat_audio = combat_audio
 	get_tree().current_scene.add_child(projectile)
 
-func take_damage(amount: int, hit_position: Vector3, hit_direction: Vector3) -> void:
+func take_damage(amount: int, _hit_position: Vector3, _hit_direction: Vector3) -> void:
 	if is_dead:
 		return
 	health -= amount
 	if health <= 0:
-		_die(hit_position, hit_direction)
+		_die()
 
-func _die(hit_position: Vector3, hit_direction: Vector3) -> void:
+func _die() -> void:
 	is_dead = true
+	velocity = Vector3.ZERO
 	set_physics_process(false)
-	if is_instance_valid(visual_root):
-		visual_root.visible = false
 	if is_instance_valid(body_collision):
 		body_collision.set_deferred("disabled", true)
-	var ragdoll := RigidBody3D.new()
-	ragdoll.name = "Ragdoll"
-	ragdoll.position = Vector3(0, 1.0, 0)
-	ragdoll.mass = 38.0
-	ragdoll.linear_damp = 2.8
-	ragdoll.angular_damp = 3.5
-	ragdoll.collision_layer = 4
-	ragdoll.collision_mask = 1
-	add_child(ragdoll)
-	var rag_shape := CollisionShape3D.new()
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.25
-	capsule.height = 0.9
-	rag_shape.shape = capsule
-	ragdoll.add_child(rag_shape)
-	var torso := MeshInstance3D.new()
-	var mesh := CapsuleMesh.new()
-	mesh.radius = 0.27
-	mesh.height = 0.9
-	torso.mesh = mesh
-	if body_mesh.material_override:
-		torso.material_override = body_mesh.material_override
-	ragdoll.add_child(torso)
-	var parts: Array[RigidBody3D] = [ragdoll]
-	var part_specs := [
-		{"name": "Head", "offset": Vector3(0, 0.53, 0), "radius": 0.16, "height": 0.3, "color": Color("454c40")},
-		{"name": "LeftArm", "offset": Vector3(-0.34, 0.05, 0), "radius": 0.095, "height": 0.62, "color": Color("555d4a")},
-		{"name": "RightArm", "offset": Vector3(0.34, 0.05, 0), "radius": 0.095, "height": 0.62, "color": Color("555d4a")},
-		{"name": "LeftLeg", "offset": Vector3(-0.14, -0.59, 0), "radius": 0.11, "height": 0.72, "color": Color("454b3e")},
-		{"name": "RightLeg", "offset": Vector3(0.14, -0.59, 0), "radius": 0.11, "height": 0.72, "color": Color("454b3e")}
-	]
-	for spec in part_specs:
-		var limb := RigidBody3D.new()
-		limb.name = spec.name
-		limb.position = ragdoll.position + spec.offset
-		if spec.name.contains("Arm"):
-			limb.rotation.z = -0.32 if spec.name == "LeftArm" else 0.32
-		limb.mass = 5.0 if spec.name.contains("Leg") else 2.2
-		limb.linear_damp = 3.4
-		limb.angular_damp = 4.2
-		limb.collision_layer = 4
-		limb.collision_mask = 1
-		var limb_shape := CollisionShape3D.new()
-		var limb_capsule := CapsuleShape3D.new()
-		limb_capsule.radius = spec.radius
-		limb_capsule.height = spec.height
-		limb_shape.shape = limb_capsule
-		limb.add_child(limb_shape)
-		var limb_mesh := MeshInstance3D.new()
-		var capsule_mesh := CapsuleMesh.new()
-		capsule_mesh.radius = spec.radius
-		capsule_mesh.height = spec.height
-		limb_mesh.mesh = capsule_mesh
-		var limb_material := StandardMaterial3D.new()
-		limb_material.albedo_color = spec.color
-		limb_mesh.material_override = limb_material
-		limb.add_child(limb_mesh)
-		add_child(limb)
-		parts.append(limb)
-	# Light pin joints keep the ragdoll compact and believable without a full character skeleton.
-	for index in range(1, parts.size()):
-		var joint := PinJoint3D.new()
-		joint.position = (parts[0].position + parts[index].position) * 0.5
-		add_child(joint)
-		joint.node_a = joint.get_path_to(parts[0])
-		joint.node_b = joint.get_path_to(parts[index])
-	ragdoll.apply_impulse(hit_direction.normalized() * 1.4 + Vector3.UP * 0.45, hit_position - ragdoll.global_position)
+	animation_locked = true
+	if not anim_death.is_empty():
+		_play_animation(anim_death, 0.08, 1.0, true)
+	else:
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.tween_property(visual_root, "rotation", Vector3(0.0, 0.0, deg_to_rad(86.0)), 0.48)
+		tween.parallel().tween_property(visual_root, "position:y", 0.14, 0.48)
 	var cleanup := get_tree().create_timer(7.0)
 	cleanup.timeout.connect(queue_free)
 	died.emit(self)

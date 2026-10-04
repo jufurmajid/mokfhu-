@@ -75,84 +75,83 @@ func _build_weapon(parent: Node3D) -> void:
 		hand.material_override = glove
 		hand.position = Vector3(side * 0.12, -0.22, -0.38 if side > 0.0 else -0.22)
 		weapon.add_child(hand)
-	var body := MeshInstance3D.new()
-	var body_mesh := BoxMesh.new()
-	body_mesh.size = Vector3(0.13, 0.16, 0.62)
-	body.mesh = body_mesh
 	var dark := StandardMaterial3D.new()
 	dark.albedo_color = Color("272a25")
 	dark.metallic = 0.28
-	dark.roughness = 0.58
-	body.material_override = dark
-	weapon.add_child(body)
-	var stock := MeshInstance3D.new()
-	var stock_mesh := BoxMesh.new()
-	stock_mesh.size = Vector3(0.12, 0.15, 0.34)
+	dark.roughness = 0.72
 	var wood := StandardMaterial3D.new()
-	wood.albedo_color = Color("684b32")
+	wood.albedo_color = Color("765235")
 	wood.roughness = 0.82
-	stock_mesh.material = wood
-	stock.mesh = stock_mesh
-	stock.position = Vector3(0, -0.015, 0.43)
-	weapon.add_child(stock)
-	var magazine_mesh := MeshInstance3D.new()
-	var mag := BoxMesh.new()
-	mag.size = Vector3(0.1, 0.25, 0.16)
-	mag.material = dark
-	magazine_mesh.mesh = mag
-	magazine_mesh.position = Vector3(0, -0.17, 0.05)
-	magazine_mesh.rotation.x = -0.12
-	weapon.add_child(magazine_mesh)
-	var magazine_tip := MeshInstance3D.new()
-	var mag_tip_mesh := BoxMesh.new()
-	mag_tip_mesh.size = Vector3(0.09, 0.11, 0.13)
-	mag_tip_mesh.material = dark
-	magazine_tip.mesh = mag_tip_mesh
-	magazine_tip.position = Vector3(0, -0.32, 0.12)
-	magazine_tip.rotation.x = -0.35
-	weapon.add_child(magazine_tip)
-	var handguard := MeshInstance3D.new()
-	var guard_mesh := BoxMesh.new()
-	guard_mesh.size = Vector3(0.16, 0.12, 0.25)
-	guard_mesh.material = wood
-	handguard.mesh = guard_mesh
-	handguard.position.z = -0.27
-	weapon.add_child(handguard)
-	var grip := MeshInstance3D.new()
-	var grip_mesh := BoxMesh.new()
-	grip_mesh.size = Vector3(0.09, 0.22, 0.13)
-	grip_mesh.material = wood
-	grip.mesh = grip_mesh
-	grip.position = Vector3(0, -0.16, 0.16)
-	grip.rotation.x = -0.2
-	weapon.add_child(grip)
-	var barrel := MeshInstance3D.new()
-	var barrel_mesh := CylinderMesh.new()
-	barrel_mesh.top_radius = 0.025
-	barrel_mesh.bottom_radius = 0.025
-	barrel_mesh.height = 0.36
-	barrel_mesh.material = dark
-	barrel.mesh = barrel_mesh
-	barrel.rotation.x = PI / 2
-	barrel.position.z = -0.47
-	weapon.add_child(barrel)
-	# Simple iron sights make the AK profile read clearly in first person.
-	for sight_z in [-0.27, -0.57]:
-		var sight := MeshInstance3D.new()
-		var sight_mesh := BoxMesh.new()
-		sight_mesh.size = Vector3(0.035, 0.10, 0.045)
-		sight.mesh = sight_mesh
-		sight.material_override = dark
-		sight.position = Vector3(0, 0.12, sight_z)
-		weapon.add_child(sight)
+	_weapon_box("Receiver", Vector3(0.145, 0.17, 0.43), Vector3(0, 0, -0.02), dark)
+	_weapon_box("DustCover", Vector3(0.13, 0.045, 0.37), Vector3(0, 0.105, 0.01), dark)
+	_weapon_box("ReceiverFront", Vector3(0.14, 0.13, 0.12), Vector3(0, -0.005, -0.27), dark)
+	_weapon_box("WoodStock", Vector3(0.125, 0.145, 0.34), Vector3(0, -0.025, 0.36), wood, Vector3(0.0, 0.0, -0.08))
+	_weapon_box("StockButtPlate", Vector3(0.13, 0.17, 0.035), Vector3(0, -0.025, 0.535), dark)
+	_weapon_box("PistolGrip", Vector3(0.09, 0.22, 0.12), Vector3(0, -0.18, 0.13), wood, Vector3(-0.18, 0.0, 0.12))
+	_weapon_capsule("WoodHandguard", 0.083, 0.34, Vector3(0, -0.005, -0.43), wood, Vector3(PI / 2.0, 0.0, 0.0))
+	# The segmented forward bend gives the magazine the distinctive curved AK profile.
+	var mag_offsets := [Vector3(0, -0.14, 0.045), Vector3(0, -0.22, 0.075), Vector3(0, -0.30, 0.12), Vector3(0, -0.37, 0.17)]
+	for index in mag_offsets.size():
+		var segment_size := Vector3(0.102, 0.105, 0.145)
+		var segment := _weapon_box("CurvedMagazine_%d" % index, segment_size, mag_offsets[index], dark)
+		segment.rotation.x = -0.12 - float(index) * 0.09
+	_weapon_box("MagazineBase", Vector3(0.106, 0.045, 0.13), Vector3(0, -0.425, 0.205), dark, Vector3(-0.40, 0.0, 0.0))
+	_weapon_box("TriggerBlock", Vector3(0.055, 0.11, 0.10), Vector3(0, -0.105, 0.115), dark)
+	_weapon_cylinder("Barrel", 0.026, 0.62, Vector3(0, 0.02, -0.72), dark)
+	_weapon_cylinder("GasTube", 0.033, 0.36, Vector3(0, 0.145, -0.43), dark)
+	_weapon_cylinder("MuzzleBrake", 0.037, 0.085, Vector3(0, 0.02, -1.06), dark)
+	_weapon_box("FrontSightBase", Vector3(0.17, 0.045, 0.07), Vector3(0, 0.13, -0.84), dark)
+	_weapon_box("FrontSightPost", Vector3(0.025, 0.12, 0.03), Vector3(0, 0.205, -0.84), dark)
+	_weapon_box("RearSightBase", Vector3(0.14, 0.055, 0.075), Vector3(0, 0.13, -0.10), dark)
+	_weapon_box("RearSightNotch", Vector3(0.045, 0.035, 0.04), Vector3(0, 0.175, -0.10), dark)
+	_weapon_box("BoltHandle", Vector3(0.10, 0.045, 0.045), Vector3(0.105, 0.035, -0.02), dark)
 	var flash := OmniLight3D.new()
 	flash.name = "MuzzleFlash"
-	flash.position = Vector3(0, 0, -0.68)
+	flash.position = Vector3(0, 0.02, -1.10)
 	flash.light_color = Color("ffcf84")
 	flash.light_energy = 0.0
 	flash.omni_range = 3.0
 	flash.shadow_enabled = false
 	weapon.add_child(flash)
+
+func _weapon_box(label: String, size: Vector3, position: Vector3, material: Material, rotation: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = label
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	part.mesh = mesh
+	part.position = position
+	part.rotation = rotation
+	part.material_override = material
+	weapon.add_child(part)
+	return part
+
+func _weapon_cylinder(label: String, radius: float, height: float, position: Vector3, material: Material) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = label
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = height
+	part.mesh = mesh
+	part.rotation.x = PI / 2.0
+	part.position = position
+	part.material_override = material
+	weapon.add_child(part)
+	return part
+
+func _weapon_capsule(label: String, radius: float, height: float, position: Vector3, material: Material, rotation: Vector3) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = label
+	var mesh := CapsuleMesh.new()
+	mesh.radius = radius
+	mesh.height = height
+	part.mesh = mesh
+	part.rotation = rotation
+	part.position = position
+	part.material_override = material
+	weapon.add_child(part)
+	return part
 
 func _process(delta: float) -> void:
 	shot_cooldown = maxf(0.0, shot_cooldown - delta)

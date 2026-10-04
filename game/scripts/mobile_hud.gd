@@ -156,7 +156,7 @@ func _input(event: InputEvent) -> void:
 				look_touch = -1
 	elif event is InputEventScreenDrag:
 		if event.index == move_touch:
-			var delta := (event.position - move_origin) / 65.0
+			var delta: Vector2 = (event.position - move_origin) / 65.0
 			var clamped := Vector2(clampf(delta.x, -1, 1), clampf(delta.y, -1, 1))
 			joystick_knob.position = Vector2(42, 42) + clamped * 38.0
 			move_changed.emit(clamped)

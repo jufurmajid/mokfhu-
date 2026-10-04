@@ -213,17 +213,18 @@ func _add_shrub(pos: Vector3) -> void:
 	root.position = pos
 	add_child(root)
 	for i in 4:
-		var blade := MeshInstance3D.new()
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(0.12, 0.65 + float(i % 2) * 0.18, 0.12)
-		blade.mesh = mesh
-		blade.position = Vector3(randf_range(-0.35, 0.35), 0.35, randf_range(-0.35, 0.35))
-		blade.rotation.z = randf_range(-0.35, 0.35)
+		var leaf := MeshInstance3D.new()
+		var mesh := SphereMesh.new()
+		mesh.radial_segments = 8
+		mesh.rings = 4
+		leaf.mesh = mesh
+		leaf.scale = Vector3(0.40, randf_range(0.35, 0.60), 0.38)
+		leaf.position = Vector3(randf_range(-0.28, 0.28), 0.24, randf_range(-0.28, 0.28))
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = Color("686547")
 		mat.roughness = 1.0
-		blade.material_override = mat
-		root.add_child(blade)
+		leaf.material_override = mat
+		root.add_child(leaf)
 
 func _spawn_enemies() -> void:
 	var locations := [Vector3(-16, 0, -15), Vector3(13, 0, -18), Vector3(17, 0, 1), Vector3(-2, 0, -27), Vector3(4, 0, 25)]

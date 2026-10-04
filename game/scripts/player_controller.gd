@@ -49,6 +49,32 @@ func _build_weapon(parent: Node3D) -> void:
 	weapon = Node3D.new()
 	weapon.position = Vector3(0.29, -0.27, -0.52)
 	parent.add_child(weapon)
+	# Sleeved arms and gloves connect the rifle to the view so it no longer floats.
+	var sleeve := StandardMaterial3D.new()
+	sleeve.albedo_color = Color("555b49")
+	sleeve.roughness = 0.96
+	var glove := StandardMaterial3D.new()
+	glove.albedo_color = Color("383a31")
+	glove.roughness = 0.92
+	for side in [-1.0, 1.0]:
+		var arm := MeshInstance3D.new()
+		var arm_mesh := CapsuleMesh.new()
+		arm_mesh.radius = 0.105
+		arm_mesh.height = 0.65
+		arm.mesh = arm_mesh
+		arm.material_override = sleeve
+		arm.position = Vector3(side * 0.22, -0.22 - (0.04 if side < 0.0 else 0.0), -0.16)
+		arm.rotation = Vector3(PI / 2.0, 0.0, side * 0.28)
+		weapon.add_child(arm)
+		var hand := MeshInstance3D.new()
+		var hand_mesh := SphereMesh.new()
+		hand_mesh.radius = 0.105
+		hand_mesh.height = 0.20
+		hand.mesh = hand_mesh
+		hand.scale = Vector3(1.0, 0.7, 1.25)
+		hand.material_override = glove
+		hand.position = Vector3(side * 0.12, -0.22, -0.38 if side > 0.0 else -0.22)
+		weapon.add_child(hand)
 	var body := MeshInstance3D.new()
 	var body_mesh := BoxMesh.new()
 	body_mesh.size = Vector3(0.13, 0.16, 0.62)
@@ -110,6 +136,15 @@ func _build_weapon(parent: Node3D) -> void:
 	barrel.rotation.x = PI / 2
 	barrel.position.z = -0.47
 	weapon.add_child(barrel)
+	# Simple iron sights make the AK profile read clearly in first person.
+	for sight_z in [-0.27, -0.57]:
+		var sight := MeshInstance3D.new()
+		var sight_mesh := BoxMesh.new()
+		sight_mesh.size = Vector3(0.035, 0.10, 0.045)
+		sight.mesh = sight_mesh
+		sight.material_override = dark
+		sight.position = Vector3(0, 0.12, sight_z)
+		weapon.add_child(sight)
 	var flash := OmniLight3D.new()
 	flash.name = "MuzzleFlash"
 	flash.position = Vector3(0, 0, -0.68)

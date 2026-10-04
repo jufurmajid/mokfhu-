@@ -1,0 +1,73 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "game/**"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android-debug:
+    name: Android debug APK
+    runs-on: ubuntu-24.04
+    container:
+      image: barichello/godot-ci:4.3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Godot Android tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/godot/export_templates" "$HOME/.config/godot"
+          if [ -d /root/.config/godot ]; then
+            cp -a /root/.config/godot/. "$HOME/.config/godot/"
+          fi
+          cp -a "/root/.local/share/godot/export_templates/${GODOT_VERSION}.stable" "$HOME/.local/share/godot/export_templates/"
+
+          if [ -d /usr/lib/android-sdk ]; then
+            ANDROID_SDK="/usr/lib/android-sdk"
+          elif [ -d /opt/android-sdk ]; then
+            ANDROID_SDK="/opt/android-sdk"
+          else
+            echo "Android SDK was not found in the Godot CI image."
+            exit 1
+          fi
+
+          JAVA_BIN="$(readlink -f "$(command -v javac)")"
+          JAVA_HOME_PATH="$(dirname "$(dirname "$JAVA_BIN")")"
+          SETTINGS="$HOME/.config/godot/editor_settings-4.3.tres"
+          touch "$SETTINGS"
+          echo "export/android/android_sdk_path = \"$ANDROID_SDK\"" >> "$SETTINGS"
+          echo "export/android/java_sdk_path = \"$JAVA_HOME_PATH\"" >> "$SETTINGS"
+
+      - name: Import project
+        working-directory: game
+        run: godot --headless --editor --quit
+
+      - name: Export debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          cd game
+          godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-debug.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mokfhu-Android-debug
+          path: build/Mokfhu-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+env:
+  GODOT_VERSION: "4.3"

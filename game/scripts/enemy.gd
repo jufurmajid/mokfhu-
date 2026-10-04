@@ -24,24 +24,57 @@ func _ready() -> void:
 
 func _build_soldier() -> void:
 	var uniform := Color("555d4a") if randi() % 2 == 0 else Color("81735b")
-	body_mesh = _part("Torso", Vector3(0.48, 0.65, 0.3), Vector3(0, 1.12, 0), uniform)
-	_part("Helmet", Vector3(0.4, 0.23, 0.35), Vector3(0, 1.78, 0), Color("454c40"))
-	_part("Face", Vector3(0.28, 0.26, 0.25), Vector3(0, 1.56, -0.01), Color("947d62"))
-	_part("Pack", Vector3(0.36, 0.46, 0.2), Vector3(0, 1.2, 0.23), Color("484e40"))
-	_part("LeftLeg", Vector3(0.19, 0.58, 0.22), Vector3(-0.14, 0.42, 0), uniform.darkened(0.16))
-	_part("RightLeg", Vector3(0.19, 0.58, 0.22), Vector3(0.14, 0.42, 0), uniform.darkened(0.16))
-	_part("Rifle", Vector3(0.12, 0.1, 0.68), Vector3(0.28, 1.12, -0.32), Color("242722"))
+	# Rounded low-poly silhouette reads as a person at phone scale instead of a stack of boxes.
+	body_mesh = _capsule_part("Torso", 0.27, 0.76, Vector3(0, 1.12, 0), uniform)
+	var vest := _capsule_part("PlateCarrier", 0.285, 0.58, Vector3(0, 1.14, -0.055), uniform.darkened(0.12))
+	vest.scale = Vector3(1.0, 0.92, 0.82)
+	_part("Helmet", Vector3(0.37, 0.19, 0.34), Vector3(0, 1.78, 0), Color("454c40"), true)
+	_part("HelmetRim", Vector3(0.44, 0.045, 0.36), Vector3(0, 1.72, -0.025), Color("343a32"), false)
+	_capsule_part("Face", 0.15, 0.27, Vector3(0, 1.55, -0.018), Color("947d62"))
+	_capsule_part("Pack", 0.17, 0.50, Vector3(0, 1.18, 0.22), Color("484e40"))
+	_capsule_part("LeftLeg", 0.105, 0.62, Vector3(-0.15, 0.46, 0), uniform.darkened(0.16))
+	_capsule_part("RightLeg", 0.105, 0.62, Vector3(0.15, 0.46, 0), uniform.darkened(0.16))
+	_capsule_part("LeftArm", 0.095, 0.62, Vector3(-0.34, 1.09, -0.10), uniform)
+	_capsule_part("RightArm", 0.095, 0.62, Vector3(0.34, 1.09, -0.17), uniform)
+	# Two pouches and an AK-like weapon profile break up the silhouette without adding heavy assets.
+	_part("PouchL", Vector3(0.12, 0.16, 0.11), Vector3(-0.13, 0.98, -0.19), Color("5a503b"), true)
+	_part("PouchR", Vector3(0.12, 0.16, 0.11), Vector3(0.13, 0.98, -0.19), Color("5a503b"), true)
+	_part("RifleReceiver", Vector3(0.10, 0.12, 0.36), Vector3(0.28, 1.12, -0.31), Color("242722"), true)
+	_capsule_part("RifleBarrel", 0.025, 0.50, Vector3(0.28, 1.13, -0.69), Color("20231f"))
+	_part("RifleStock", Vector3(0.09, 0.11, 0.26), Vector3(0.28, 1.12, 0.01), Color("684b32"), true)
 
-func _part(label: String, size: Vector3, pos: Vector3, tint: Color) -> MeshInstance3D:
+func _part(label: String, size: Vector3, pos: Vector3, tint: Color, rounded: bool = false) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
 	part.name = label
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	part.mesh = mesh
+	if rounded:
+		var mesh := SphereMesh.new()
+		mesh.radius = 0.5
+		mesh.height = 1.0
+		part.mesh = mesh
+		part.scale = size
+	else:
+		var mesh := BoxMesh.new()
+		mesh.size = size
+		part.mesh = mesh
 	part.position = pos
 	var material := StandardMaterial3D.new()
 	material.albedo_color = tint
 	material.roughness = 0.92
+	part.material_override = material
+	add_child(part)
+	return part
+
+func _capsule_part(label: String, radius: float, height: float, pos: Vector3, tint: Color) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = label
+	var mesh := CapsuleMesh.new()
+	mesh.radius = radius
+	mesh.height = height
+	part.mesh = mesh
+	part.position = pos
+	var material := StandardMaterial3D.new()
+	material.albedo_color = tint
+	material.roughness = 0.94
 	part.material_override = material
 	add_child(part)
 	return part

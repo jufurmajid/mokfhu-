@@ -50,7 +50,7 @@ jobs:
           git -C /tmp/storm sparse-checkout set public/models/custom/characters
           mkdir -p game/vendor/enemy
           cp /tmp/storm/public/models/custom/characters/protagonist-vet-sniper.glb game/vendor/enemy/enemy.glb
-          cp /tmp/storm/LICENSE game/vendor/enemy/LICENSE.txt
+          git -C /tmp/storm show HEAD:LICENSE > game/vendor/enemy/LICENSE.txt
 
           test -s game/vendor/viewmodel/scene.gltf
           test -s game/vendor/viewmodel/scene.bin

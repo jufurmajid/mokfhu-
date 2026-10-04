@@ -34,8 +34,10 @@ func _build_soldier() -> void:
 	_capsule_part("Pack", 0.17, 0.50, Vector3(0, 1.18, 0.22), Color("484e40"))
 	_capsule_part("LeftLeg", 0.105, 0.62, Vector3(-0.15, 0.46, 0), uniform.darkened(0.16))
 	_capsule_part("RightLeg", 0.105, 0.62, Vector3(0.15, 0.46, 0), uniform.darkened(0.16))
-	_capsule_part("LeftArm", 0.095, 0.62, Vector3(-0.34, 1.09, -0.10), uniform)
-	_capsule_part("RightArm", 0.095, 0.62, Vector3(0.34, 1.09, -0.17), uniform)
+	var left_arm := _capsule_part("LeftArm", 0.095, 0.62, Vector3(-0.34, 1.09, -0.10), uniform)
+	left_arm.rotation.z = -0.38
+	var right_arm := _capsule_part("RightArm", 0.095, 0.62, Vector3(0.34, 1.09, -0.17), uniform)
+	right_arm.rotation.z = 0.38
 	# Two pouches and an AK-like weapon profile break up the silhouette without adding heavy assets.
 	_part("PouchL", Vector3(0.12, 0.16, 0.11), Vector3(-0.13, 0.98, -0.19), Color("5a503b"), true)
 	_part("PouchR", Vector3(0.12, 0.16, 0.11), Vector3(0.13, 0.98, -0.19), Color("5a503b"), true)
@@ -139,8 +141,9 @@ func _die(hit_position: Vector3, hit_direction: Vector3) -> void:
 	rag_shape.shape = capsule
 	ragdoll.add_child(rag_shape)
 	var torso := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.48, 0.65, 0.3)
+	var mesh := CapsuleMesh.new()
+	mesh.radius = 0.27
+	mesh.height = 0.9
 	torso.mesh = mesh
 	if body_mesh.material_override:
 		torso.material_override = body_mesh.material_override
@@ -157,6 +160,8 @@ func _die(hit_position: Vector3, hit_direction: Vector3) -> void:
 		var limb := RigidBody3D.new()
 		limb.name = spec.name
 		limb.position = ragdoll.position + spec.offset
+		if spec.name.contains("Arm"):
+			limb.rotation.z = -0.32 if spec.name == "LeftArm" else 0.32
 		limb.mass = 5.0 if spec.name.contains("Leg") else 2.2
 		limb.linear_damp = 3.4
 		limb.angular_damp = 4.2

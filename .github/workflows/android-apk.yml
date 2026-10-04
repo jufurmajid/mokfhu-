@@ -23,6 +23,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Vendor ready-made 3D assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf game/vendor game/level
+          rm -rf /tmp/fpsarms /tmp/tps
+
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/Ayush-Mohanty/FPS-Arms-3D.git /tmp/fpsarms
+          git -C /tmp/fpsarms sparse-checkout set Models/fps_ak-74m_animations
+          mkdir -p game/vendor/viewmodel
+          cp /tmp/fpsarms/Models/fps_ak-74m_animations/scene.gltf game/vendor/viewmodel/scene.gltf
+          cp /tmp/fpsarms/Models/fps_ak-74m_animations/scene.bin game/vendor/viewmodel/scene.bin
+          cp -a /tmp/fpsarms/Models/fps_ak-74m_animations/textures game/vendor/viewmodel/textures
+          cp /tmp/fpsarms/Models/fps_ak-74m_animations/license.txt game/vendor/viewmodel/LICENSE.txt
+
+          git clone --depth 1 --filter=blob:none --sparse --branch 4.2-f0587b2 https://github.com/godotengine/tps-demo.git /tmp/tps
+          git -C /tmp/tps sparse-checkout set level/geometry level/textures LICENSE.md
+          mkdir -p game/level
+          cp -a /tmp/tps/level/geometry game/level/geometry
+          cp -a /tmp/tps/level/textures game/level/textures
+          cp /tmp/tps/LICENSE.md game/level/TPS_DEMO_LICENSE.md
+
+          mkdir -p game/vendor/enemy
+          curl -L --fail --retry 3 \
+            https://raw.githubusercontent.com/mars-tw/storm-apocalypse/main/public/models/custom/characters/protagonist-vet-sniper.glb \
+            -o game/vendor/enemy/enemy.glb
+          curl -L --fail --retry 3 \
+            https://raw.githubusercontent.com/mars-tw/storm-apocalypse/main/LICENSE \
+            -o game/vendor/enemy/LICENSE.txt
+
+          test -s game/vendor/viewmodel/scene.gltf
+          test -s game/vendor/viewmodel/scene.bin
+          test -s game/vendor/enemy/enemy.glb
+          test -s game/level/geometry/scenes/structure.tscn
+
       - name: Configure Godot Android tools
         shell: bash
         run: |
@@ -59,13 +94,13 @@ jobs:
           set -euo pipefail
           mkdir -p build
           cd game
-          godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-debug.apk"
+          godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-realistic-debug.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Mokfhu-Android-debug
-          path: build/Mokfhu-debug.apk
+          name: Mokfhu-Realistic-Android-debug
+          path: build/Mokfhu-realistic-debug.apk
           if-no-files-found: error
           retention-days: 14
 

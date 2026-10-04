@@ -17,6 +17,8 @@ var fire_timer := 0.0
 var volume_levels := [0.85, 0.55, 0.28, 0.0]
 var volume_labels := ["الصوت 85%", "الصوت 55%", "الصوت 28%", "الصوت مغلق"]
 var volume_index := 0
+var joystick_base: Panel
+var joystick_knob: Panel
 
 func _ready() -> void:
 	_build_ui()
@@ -87,6 +89,28 @@ func _build_ui() -> void:
 	instruction.position = Vector2(-180, -18)
 	instruction.add_theme_color_override("font_color", Color(0.96, 0.92, 0.8, 0.72))
 	root.add_child(instruction)
+	# A persistent thumb pad makes the movement area discoverable before the first touch.
+	joystick_base = Panel.new()
+	joystick_base.position = Vector2(58, -218)
+	joystick_base.size = Vector2(142, 142)
+	joystick_base.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	joystick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var base_style := StyleBoxFlat.new()
+	base_style.bg_color = Color(0.12, 0.15, 0.13, 0.34)
+	base_style.border_color = Color(0.86, 0.82, 0.70, 0.48)
+	base_style.set_border_width_all(2)
+	base_style.set_corner_radius_all(71)
+	joystick_base.add_theme_stylebox_override("panel", base_style)
+	root.add_child(joystick_base)
+	joystick_knob = Panel.new()
+	joystick_knob.size = Vector2(58, 58)
+	joystick_knob.position = Vector2(42, 42)
+	joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var knob_style := StyleBoxFlat.new()
+	knob_style.bg_color = Color(0.83, 0.80, 0.68, 0.56)
+	knob_style.set_corner_radius_all(29)
+	joystick_knob.add_theme_stylebox_override("panel", knob_style)
+	joystick_base.add_child(joystick_knob)
 
 func _button(parent: Control, caption: String, _unused: Vector2, size: Vector2, color: Color, hold_fire: bool) -> Button:
 	var button := Button.new()
@@ -118,20 +142,26 @@ func _input(event: InputEvent) -> void:
 			if event.position.x < size.x * 0.43 and move_touch == -1:
 				move_touch = event.index
 				move_origin = event.position
+				joystick_base.position = Vector2(clampf(event.position.x - 71.0, 16.0, size.x * 0.43 - 142.0), -218.0)
+				joystick_knob.position = Vector2(42, 42)
 			elif event.position.x > size.x * 0.58 and look_touch == -1:
 				look_touch = event.index
 		else:
 			if event.index == move_touch:
 				move_touch = -1
 				move_changed.emit(Vector2.ZERO)
+				joystick_base.position = Vector2(58, -218)
+				joystick_knob.position = Vector2(42, 42)
 			if event.index == look_touch:
 				look_touch = -1
 	elif event is InputEventScreenDrag:
 		if event.index == move_touch:
-			var delta := (event.position - move_origin) / 75.0
-			move_changed.emit(Vector2(clampf(delta.x, -1, 1), clampf(delta.y, -1, 1)))
+			var delta := (event.position - move_origin) / 65.0
+			var clamped := Vector2(clampf(delta.x, -1, 1), clampf(delta.y, -1, 1))
+			joystick_knob.position = Vector2(42, 42) + clamped * 38.0
+			move_changed.emit(clamped)
 		elif event.index == look_touch:
-			look_delta.emit(event.relative * 0.004)
+			look_delta.emit(event.relative * 0.0024)
 
 func _start_fire() -> void:
 	fire_held = true

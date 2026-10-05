@@ -76,6 +76,26 @@ jobs:
               print(f"Downloaded {path} ({path.stat().st_size} bytes)")
           PY
 
+          # 3dassets.dev intentionally uses KHR_mesh_quantization. Godot 4.3's
+          # importer rejects that required extension, so convert the tiny runtime
+          # assets to ordinary float geometry before Godot sees them.
+          NODE_MAJOR=0
+          if command -v node >/dev/null 2>&1; then
+            NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+          fi
+          if [ "$NODE_MAJOR" -lt 18 ]; then
+            apt-get update -qq
+            apt-get install -y -qq curl ca-certificates gnupg
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+            apt-get install -y -qq nodejs
+          fi
+          npm install --global --no-audit --no-fund @gltf-transform/cli@4.5.1
+          for asset in game/vendor/desert/*.glb game/vendor/enemy/*.glb; do
+            converted="${asset%.glb}.dequantized.glb"
+            gltf-transform dequantize "$asset" "$converted"
+            mv "$converted" "$asset"
+          done
+
           test -s game/vendor/viewmodel/scene.gltf
           test -s game/vendor/viewmodel/scene.bin
           test -s game/vendor/desert/ground_light.glb
@@ -115,7 +135,13 @@ jobs:
       - name: Import project
         working-directory: game
         shell: bash
-        run: timeout 12m godot --headless --editor --quit
+        run: |
+          set -euo pipefail
+          timeout 12m godot --headless --editor --quit 2>&1 | tee /tmp/mokfhu-import.log
+          if grep -E "ERROR: GLTF:|Error importing|Failed loading resource" /tmp/mokfhu-import.log; then
+            echo "Godot asset import failed."
+            exit 1
+          fi
 
       - name: Runtime smoke test
         working-directory: game
@@ -123,7 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           timeout 60s godot --headless --quit-after 120 --verbose 2>&1 | tee /tmp/mokfhu-smoke.log
-          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call|MOKFHU_FATAL" /tmp/mokfhu-smoke.log; then
+          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call|MOKFHU_FATAL|Failed loading resource" /tmp/mokfhu-smoke.log; then
             echo "Runtime or visible-asset validation error detected."
             exit 1
           fi

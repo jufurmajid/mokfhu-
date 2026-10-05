@@ -8,17 +8,20 @@ const RELOAD = preload("res://assets/audio/reload_click.wav")
 
 const MAX_VOICES := 12
 var active_voices := 0
-var master_db := -2.0
+var master_db := 0.0
 var whiz_cooldown := 0.0
 
 func _process(delta: float) -> void:
 	whiz_cooldown = maxf(0.0, whiz_cooldown - delta)
 
-func play_player_shot(at: Vector3) -> void:
-	_play_3d(PLAYER_SHOT, at, 0.0, 36.0, 2)
+func play_player_shot(_at: Vector3) -> void:
+	# The player's own gun must never depend on 3D listener/attenuation state.
+	# A normal AudioStreamPlayer is reliable on Android and still uses the same
+	# original weapon recording.
+	_play_local(PLAYER_SHOT, 0.0, 1, randf_range(0.985, 1.015))
 
-func play_reload(at: Vector3) -> void:
-	_play_3d(RELOAD, at, -3.0, 8.0, 1)
+func play_reload(_at: Vector3) -> void:
+	_play_local(RELOAD, -2.0, 1, 1.0)
 
 func play_enemy_shot(at: Vector3, listener: Vector3) -> void:
 	var distance := at.distance_to(listener)
@@ -45,13 +48,29 @@ func set_master_volume(value: float) -> void:
 	var level := clampf(value, 0.0, 1.0)
 	master_db = -80.0 if level <= 0.001 else linear_to_db(level)
 
+func _play_local(stream: AudioStream, offset_db: float, cost: int, pitch: float) -> void:
+	if active_voices >= MAX_VOICES:
+		return
+	active_voices += cost
+	var voice := AudioStreamPlayer.new()
+	voice.stream = stream
+	voice.volume_db = master_db + offset_db
+	voice.pitch_scale = pitch
+	voice.bus = "Master"
+	add_child(voice)
+	voice.finished.connect(func():
+		active_voices = maxi(0, active_voices - cost)
+		voice.queue_free()
+	)
+	voice.play()
+
 func _play_3d(stream: AudioStream, at: Vector3, offset_db: float, range_m: float, cost: int, cutoff_hz: float = 16000.0, filter_db: float = -2.0) -> void:
 	if active_voices >= MAX_VOICES:
 		return
 	active_voices += cost
 	var voice := AudioStreamPlayer3D.new()
 	voice.stream = stream
-	voice.position = at
+	voice.global_position = at
 	voice.volume_db = master_db + offset_db
 	voice.max_distance = range_m
 	voice.unit_size = 4.0
@@ -61,6 +80,9 @@ func _play_3d(stream: AudioStream, at: Vector3, offset_db: float, range_m: float
 	voice.pitch_scale = randf_range(0.97, 1.03)
 	voice.bus = "Master"
 	add_child(voice)
+	# Set the global position after parenting. This avoids treating a world-space
+	# muzzle coordinate as a local offset when the audio node ever gets moved.
+	voice.global_position = at
 	voice.finished.connect(func():
 		active_voices = maxi(0, active_voices - cost)
 		voice.queue_free()

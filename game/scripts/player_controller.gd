@@ -8,8 +8,13 @@ const WALK_SPEED := 5.2
 const MAGAZINE_SIZE := 30
 const DEFAULT_RELOAD_SECONDS := 2.25
 const SHOT_INTERVAL := 0.105
-const VIEWMODEL_POSITION := Vector3(0.025, -0.052, -0.015)
-const VIEWMODEL_SCALE := 0.325
+
+# The source FPS rig is authored at a much larger on-screen scale than our
+# mobile camera. Keep it well in front of the near plane and frame it like a
+# normal right-handed FPS viewmodel so the shoulder/forearm never fill screen.
+const VIEWMODEL_POSITION := Vector3(0.20, -0.21, -0.58)
+const VIEWMODEL_SCALE := 0.145
+const VIEWMODEL_ROTATION_DEGREES := Vector3(-3.0, 180.0, 1.0)
 const VIEWMODEL_PATH := "res://vendor/viewmodel/scene.gltf"
 
 var health := 100
@@ -56,8 +61,8 @@ func _ready() -> void:
 	camera = Camera3D.new()
 	camera.name = "Camera"
 	camera.current = true
-	camera.fov = 76.0
-	camera.near = 0.03
+	camera.fov = 82.0
+	camera.near = 0.02
 	view_pivot.add_child(camera)
 	_build_viewmodel()
 
@@ -81,7 +86,7 @@ func _build_viewmodel() -> void:
 		return
 	viewmodel.name = "FPS_AK74M_Arms"
 	viewmodel.scale = Vector3.ONE * VIEWMODEL_SCALE
-	viewmodel.rotation.y = PI
+	viewmodel.rotation_degrees = VIEWMODEL_ROTATION_DEGREES
 	viewmodel_mount.add_child(viewmodel)
 
 	viewmodel_anim = _find_animation_player(viewmodel)
@@ -97,7 +102,7 @@ func _build_viewmodel() -> void:
 
 	muzzle_flash = OmniLight3D.new()
 	muzzle_flash.name = "MuzzleFlash"
-	muzzle_flash.position = Vector3(0.18, -0.05, -1.05)
+	muzzle_flash.position = Vector3(0.13, -0.06, -0.86)
 	muzzle_flash.light_color = Color("ffbe72")
 	muzzle_flash.light_energy = 0.0
 	muzzle_flash.omni_range = 2.8
@@ -182,11 +187,11 @@ func _update_viewmodel_motion(delta: float) -> void:
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	var move_strength := clampf(horizontal_speed / WALK_SPEED, 0.0, 1.0)
 	if move_strength > 0.04 and is_on_floor():
-		walk_bob_time += delta * 8.6
+		walk_bob_time += delta * 8.2
 	var bob := Vector3.ZERO
 	if not reloading:
-		bob.x = sin(walk_bob_time) * 0.0045 * move_strength
-		bob.y = abs(cos(walk_bob_time * 2.0)) * 0.004 * move_strength
+		bob.x = sin(walk_bob_time) * 0.0030 * move_strength
+		bob.y = abs(cos(walk_bob_time * 2.0)) * 0.0025 * move_strength
 	var target := VIEWMODEL_POSITION + bob
 	viewmodel_mount.position = viewmodel_mount.position.lerp(target, clampf(delta * 14.0, 0.0, 1.0))
 	_play_locomotion_animation()

@@ -34,9 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf game/vendor game/level
-          rm -rf /tmp/fpsarms /tmp/tps /tmp/storm
+          rm -rf /tmp/fpsarms
 
-          # Ready-made animated first-person AK + hands.
+          # Ready-made animated first-person AK + hands. Keep this rig unchanged:
+          # its reload/shoot animations are already working well in the game.
           git clone --depth 1 --filter=blob:none --sparse https://github.com/Ayush-Mohanty/FPS-Arms-3D.git /tmp/fpsarms
           git -C /tmp/fpsarms sparse-checkout set Models/fps_ak-74m_animations
           mkdir -p game/vendor/viewmodel
@@ -45,25 +46,46 @@ jobs:
           cp -a /tmp/fpsarms/Models/fps_ak-74m_animations/textures game/vendor/viewmodel/textures
           cp /tmp/fpsarms/Models/fps_ak-74m_animations/license.txt game/vendor/viewmodel/LICENSE.txt
 
-          # Only the authored visible map GLB is vendored. Importing the whole TPS demo
-          # pulled thousands of unused textures/scenes and previously hit GitHub's 6h limit.
-          git clone --depth 1 --filter=blob:none --sparse --branch 4.2-f0587b2 https://github.com/godotengine/tps-demo.git /tmp/tps
-          git -C /tmp/tps sparse-checkout set --no-cone '/level/geometry/models/structure.glb' '/LICENSE.md'
-          mkdir -p game/level
-          cp /tmp/tps/level/geometry/models/structure.glb game/level/structure.glb
-          cp /tmp/tps/LICENSE.md game/level/TPS_DEMO_LICENSE.md
+          # Download only a few tiny CC0 GLB assets for the compact desert arena
+          # and two realistic tactical enemy poses. This replaces the former large
+          # industrial level and its expensive runtime trimesh collisions.
+          if ! command -v python3 >/dev/null 2>&1; then
+            apt-get update -qq
+            apt-get install -y -qq python3 ca-certificates
+          fi
+          mkdir -p game/vendor/desert game/vendor/enemy
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          import shutil
 
-          # Ready-made realistic enemy character.
-          git clone --depth 1 --filter=blob:none --sparse https://github.com/mars-tw/storm-apocalypse.git /tmp/storm
-          git -C /tmp/storm sparse-checkout set public/models/custom/characters
-          mkdir -p game/vendor/enemy
-          cp /tmp/storm/public/models/custom/characters/protagonist-vet-sniper.glb game/vendor/enemy/enemy.glb
-          git -C /tmp/storm show HEAD:LICENSE > game/vendor/enemy/LICENSE.txt
+          assets = {
+              "https://cdn.3dassets.dev/assets/38107/v1/model.glb": "game/vendor/desert/ground_light.glb",
+              "https://cdn.3dassets.dev/assets/38108/v1/model.glb": "game/vendor/desert/ground_dark.glb",
+              "https://cdn.3dassets.dev/assets/38109/v1/model.glb": "game/vendor/desert/sand_drift.glb",
+              "https://cdn.3dassets.dev/assets/133/v1/model.glb": "game/vendor/desert/rock_outcrop.glb",
+              "https://cdn.3dassets.dev/assets/27567/v1/model.glb": "game/vendor/enemy/assault_aim.glb",
+              "https://cdn.3dassets.dev/assets/27569/v1/model.glb": "game/vendor/enemy/assault_run.glb",
+          }
+          for url, output in assets.items():
+              path = Path(output)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              request = Request(url, headers={"User-Agent": "Mokfhu-Godot-Build/1.0"})
+              with urlopen(request, timeout=90) as response, path.open("wb") as dst:
+                  shutil.copyfileobj(response, dst)
+              if path.stat().st_size < 1024:
+                  raise RuntimeError(f"Downloaded asset is unexpectedly small: {url}")
+              print(f"Downloaded {path} ({path.stat().st_size} bytes)")
+          PY
 
           test -s game/vendor/viewmodel/scene.gltf
           test -s game/vendor/viewmodel/scene.bin
-          test -s game/vendor/enemy/enemy.glb
-          test -s game/level/structure.glb
+          test -s game/vendor/desert/ground_light.glb
+          test -s game/vendor/desert/ground_dark.glb
+          test -s game/vendor/desert/sand_drift.glb
+          test -s game/vendor/desert/rock_outcrop.glb
+          test -s game/vendor/enemy/assault_aim.glb
+          test -s game/vendor/enemy/assault_run.glb
           du -sh game || true
 
       - name: Configure Godot Android tools

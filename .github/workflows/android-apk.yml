@@ -124,5 +124,37 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  publish-preview:
+    name: Publish external preview APK
+    if: github.ref == 'refs/heads/main'
+    needs: android-debug
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download tested APK
+        uses: actions/download-artifact@v4
+        with:
+          name: Mokfhu-Realistic-Android-debug
+          path: release-apk
+
+      - name: Publish stable preview release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APK="release-apk/Mokfhu-realistic-debug.apk"
+          test -s "$APK"
+          if gh release view realistic-preview --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload realistic-preview "$APK" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create realistic-preview "$APK" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Mokfhu Realistic Preview" \
+              --notes "Automated Android preview. This APK passed Godot import, runtime smoke test, and Android export."
+          fi
+
 env:
   GODOT_VERSION: "4.3"

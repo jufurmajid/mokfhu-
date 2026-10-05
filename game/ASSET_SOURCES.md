@@ -14,23 +14,28 @@ The Android build vendors ready-made 3D assets at build time so the visible comb
 Credit required by the model license:
 > This work is based on "FPS AK-74m animations" by Cransh, licensed under CC BY 4.0.
 
-## Environment
+## Compact desert arena
 
-- Asset: Godot Engine **TPS Demo** level geometry and textures, tag `4.2-f0587b2`
-- Authors/assets: Juan Linietsky and Fernando Miguel Calabró
-- Asset license: **CC BY 3.0**
-- Code license: MIT
-- Runtime uses the authored level geometry/scenes instead of procedural visible boxes.
+The heavy industrial TPS level was removed for the mobile build. The new arena is approximately 42 x 42 metres and uses small ready-made CC0 GLB assets from **3DAssets.dev**:
 
-## Animated enemy
+- `Desert Ground Module` — asset ID `38107`, CC0 1.0
+- `Desert Ground Module Dark` — asset ID `38108`, CC0 1.0
+- `Sand Drift` — asset ID `38109`, CC0 1.0
+- `Frontier sandstone outcrop` — asset ID `133`, CC0 1.0
 
-- Asset: `protagonist-vet-sniper.glb`
-- Source: `mars-tw/storm-apocalypse`
-- License in source repository: **MIT** (Copyright 2026 mars-tw)
-- Used as an animated military enemy visual so enemies are no longer capsule/box characters.
+The two 6 m ground modules are instanced with different rotations to form the floor. Rock outcrops and sand drifts are instanced as cover and dressing. Only invisible gameplay collision boxes are generated in code; no visible primitive boxes are used for the environment.
+
+## Realistic tactical enemy
+
+The previous stylized low-poly enemy was replaced with two realistic tactical operator poses from the **Tactical Shooter Hill Town** pack on 3DAssets.dev:
+
+- `Assault Trooper Standing Aim Pose` — asset ID `27567`, CC0 1.0
+- `Assault Trooper Running Pose` — asset ID `27569`, CC0 1.0
+
+The enemy controller switches between the running and aiming authored meshes depending on movement/fire state. The models include the tactical uniform, helmet, plate carrier and rifle as authored geometry. Invisible capsule collision is used only for gameplay physics.
 
 ## User-provided assets
 
-The user-provided `ak_47.glb` was inspected and contains a skin plus real `Fire` and `Reload` animations. The user-provided `soldier.glb` was also inspected, but it contains no skeleton, skin, or animations. The connected repository writer cannot directly commit these Library binary uploads, so this build uses the licensed ready-made animated assets above while preserving the user's original combat audio files already stored in the repository.
+The user-provided `ak_47.glb` was inspected and contains a skin plus real `Fire` and `Reload` animations. The user-provided `soldier.glb` was also inspected, but it contains no skeleton, skin, or animations. The connected repository writer cannot directly commit these Library binary uploads, so the build uses the licensed ready-made assets above while preserving the user's original combat audio files already stored in the repository.
 
 No art, audio, or models are extracted from commercial games such as Combat Master or Modern Combat.

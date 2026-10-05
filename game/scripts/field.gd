@@ -9,37 +9,34 @@ const DESERT_GROUND_LIGHT := "res://vendor/desert/ground_light.glb"
 const DESERT_GROUND_DARK := "res://vendor/desert/ground_dark.glb"
 const DESERT_ROCK := "res://vendor/desert/rock_outcrop.glb"
 const DESERT_DRIFT := "res://vendor/desert/sand_drift.glb"
-const TILE_SIZE := 6.0
-const TILE_RADIUS := 3
-const ARENA_HALF_SIZE := 21.0
+const TILE_SIZE := 7.0
+const TILE_RADIUS := 2
+const ARENA_HALF_SIZE := 17.5
 
-const PLAYER_SPAWN := Vector3(0.0, 0.25, 16.0)
+const PLAYER_SPAWN := Vector3(0.0, 1.0, 13.0)
 const ENEMY_SPAWNS := [
-	Vector3(-13.0, 0.25, -11.0),
-	Vector3(12.0, 0.25, -12.0),
-	Vector3(-11.0, 0.25, 3.0),
-	Vector3(12.0, 0.25, 4.0)
+	Vector3(-10.0, 1.0, -10.0),
+	Vector3(10.0, 1.0, -10.0),
+	Vector3(-10.0, 1.0, 1.0),
+	Vector3(10.0, 1.0, 2.0)
 ]
 
 const ROCK_LAYOUT := [
-	[Vector3(-16.0, 0.12, -15.0), 1.65, -0.35],
-	[Vector3(-6.0, 0.12, -12.0), 1.15, 0.65],
-	[Vector3(7.0, 0.12, -15.0), 1.45, 1.20],
-	[Vector3(16.0, 0.12, -8.0), 1.30, -0.80],
-	[Vector3(-15.0, 0.12, -1.0), 1.25, 0.20],
-	[Vector3(4.0, 0.12, -3.0), 1.05, -1.10],
-	[Vector3(15.0, 0.12, 10.0), 1.50, 0.90],
-	[Vector3(-14.0, 0.12, 12.0), 1.40, -1.25],
-	[Vector3(-3.0, 0.12, 10.0), 0.95, 0.45]
+	[Vector3(-13.0, 0.0, -13.0), 2.3, -0.35],
+	[Vector3(-4.5, 0.0, -10.0), 1.7, 0.65],
+	[Vector3(6.5, 0.0, -12.0), 2.0, 1.20],
+	[Vector3(13.0, 0.0, -5.0), 1.8, -0.80],
+	[Vector3(-12.5, 0.0, 2.0), 1.9, 0.20],
+	[Vector3(3.0, 0.0, -1.5), 1.5, -1.10],
+	[Vector3(12.0, 0.0, 10.0), 2.2, 0.90],
+	[Vector3(-11.5, 0.0, 10.5), 2.0, -1.25]
 ]
 
 const DRIFT_LAYOUT := [
-	[Vector3(-9.0, 0.12, -18.0), -0.15],
-	[Vector3(9.0, 0.12, -18.0), 0.30],
-	[Vector3(-18.0, 0.12, 7.0), 1.55],
-	[Vector3(18.0, 0.12, 3.0), -1.45],
-	[Vector3(-5.0, 0.12, 18.0), 2.70],
-	[Vector3(8.0, 0.12, 17.0), -2.50]
+	[Vector3(-7.0, 0.0, -15.0), -0.15, 7.5],
+	[Vector3(8.0, 0.0, -14.5), 0.30, 6.8],
+	[Vector3(-14.5, 0.0, 7.0), 1.55, 6.5],
+	[Vector3(7.0, 0.0, 14.0), -2.50, 7.2]
 ]
 
 var player: CharacterBody3D
@@ -65,17 +62,21 @@ func _build_environment() -> void:
 	var sky_material := ProceduralSkyMaterial.new()
 	sky_material.sky_top_color = Color("4f83ad")
 	sky_material.sky_horizon_color = Color("d8c29d")
-	sky_material.ground_bottom_color = Color("6a5035")
-	sky_material.ground_horizon_color = Color("c39a64")
-	sky_material.sun_angle_max = 12.0
+	sky_material.ground_bottom_color = Color("765333")
+	sky_material.ground_horizon_color = Color("c99d64")
+	sky_material.sun_angle_max = 10.0
 	sky.sky_material = sky_material
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_sky_contribution = 0.62
-	environment.ambient_light_energy = 0.68
+	environment.ambient_light_sky_contribution = 0.72
+	environment.ambient_light_energy = 0.78
 	environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.fog_enabled = false
+	environment.fog_enabled = true
+	environment.fog_light_color = Color("d6bd91")
+	environment.fog_light_energy = 0.35
+	environment.fog_density = 0.0035
+	environment.fog_sky_affect = 0.15
 	world_env.environment = environment
 	add_child(world_env)
 
@@ -83,9 +84,9 @@ func _build_environment() -> void:
 	sun.name = "DesertSun"
 	sun.rotation_degrees = Vector3(-48.0, -28.0, 0.0)
 	sun.light_color = Color("ffe0aa")
-	sun.light_energy = 1.15
+	sun.light_energy = 1.18
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 46.0
+	sun.directional_shadow_max_distance = 38.0
 	add_child(sun)
 
 func _build_desert_arena() -> void:
@@ -94,14 +95,16 @@ func _build_desert_arena() -> void:
 	var rock_scene := load(DESERT_ROCK) as PackedScene
 	var drift_scene := load(DESERT_DRIFT) as PackedScene
 	if light_ground == null or dark_ground == null or rock_scene == null or drift_scene == null:
-		push_error("One or more ready-made desert assets are missing")
+		push_error("MOKFHU_FATAL: one or more ready-made desert assets are missing")
 		return
 
 	var arena := Node3D.new()
 	arena.name = "CompactDesertArena"
 	add_child(arena)
 
-	# 42 x 42 m authored desert floor. Two ready-made variants and rotations break repetition.
+	# Every downloaded GLB has its own authored unit scale/origin. Measure the actual
+	# mesh bounds and normalize each tile at runtime so it cannot end up microscopic
+	# or buried below the collision floor on Android.
 	for x in range(-TILE_RADIUS, TILE_RADIUS + 1):
 		for z in range(-TILE_RADIUS, TILE_RADIUS + 1):
 			var source: PackedScene = light_ground if posmod(x + z, 3) != 0 else dark_ground
@@ -111,19 +114,17 @@ func _build_desert_arena() -> void:
 			tile.position = Vector3(float(x) * TILE_SIZE, 0.0, float(z) * TILE_SIZE)
 			tile.rotation.y = float(posmod(x * 3 + z, 4)) * (PI * 0.5)
 			arena.add_child(tile)
+			_fit_model_to_extent(tile, TILE_SIZE * 1.04, false)
 
 	for entry in ROCK_LAYOUT:
-		var position: Vector3 = entry[0]
-		var scale_factor: float = entry[1]
-		var yaw: float = entry[2]
 		var rock := rock_scene.instantiate() as Node3D
 		if rock == null:
 			continue
-		rock.position = position
-		rock.rotation.y = yaw
-		rock.scale = Vector3.ONE * scale_factor
+		rock.position = entry[0]
+		rock.rotation.y = entry[2]
 		arena.add_child(rock)
-		_add_rock_collision(position, scale_factor, yaw)
+		_fit_model_to_extent(rock, entry[1], true)
+		_add_rock_collision(entry[0], entry[1], entry[2])
 
 	for entry in DRIFT_LAYOUT:
 		var drift := drift_scene.instantiate() as Node3D
@@ -132,23 +133,61 @@ func _build_desert_arena() -> void:
 		drift.position = entry[0]
 		drift.rotation.y = entry[1]
 		arena.add_child(drift)
+		_fit_model_to_extent(drift, entry[2], false)
 
 	_add_invisible_floor()
 	_add_arena_boundaries()
 
+func _model_bounds(root: Node3D) -> AABB:
+	var found := false
+	var minimum := Vector3(1000000.0, 1000000.0, 1000000.0)
+	var maximum := Vector3(-1000000.0, -1000000.0, -1000000.0)
+	var mesh_nodes := root.find_children("*", "MeshInstance3D", true, false)
+	for node in mesh_nodes:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null:
+			continue
+		var box := mesh_instance.get_aabb()
+		var relative: Transform3D = root.global_transform.affine_inverse() * mesh_instance.global_transform
+		for xi in range(2):
+			for yi in range(2):
+				for zi in range(2):
+					var local_point := box.position + Vector3(box.size.x * xi, box.size.y * yi, box.size.z * zi)
+					var point: Vector3 = relative * local_point
+					minimum.x = minf(minimum.x, point.x)
+					minimum.y = minf(minimum.y, point.y)
+					minimum.z = minf(minimum.z, point.z)
+					maximum.x = maxf(maximum.x, point.x)
+					maximum.y = maxf(maximum.y, point.y)
+					maximum.z = maxf(maximum.z, point.z)
+					found = true
+	if not found:
+		return AABB(Vector3.ZERO, Vector3.ZERO)
+	return AABB(minimum, maximum - minimum)
+
+func _fit_model_to_extent(root: Node3D, target_extent: float, use_height: bool) -> void:
+	var bounds := _model_bounds(root)
+	var measured := bounds.size.y if use_height else maxf(bounds.size.x, bounds.size.z)
+	if measured <= 0.001:
+		push_error("MOKFHU_FATAL: visible GLB has no usable mesh bounds: %s" % root.name)
+		return
+	var scale_factor := target_extent / measured
+	root.scale = Vector3.ONE * scale_factor
+	# Align the authored lowest vertex to the gameplay floor after scaling.
+	root.position.y += -bounds.position.y * scale_factor + 0.015
+
 func _add_invisible_floor() -> void:
 	var floor := StaticBody3D.new()
 	floor.name = "DesertFloorCollision"
-	floor.position = Vector3(0.0, 0.0, 0.0)
 	add_child(floor)
 	var collider := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(42.0, 0.20, 42.0)
+	shape.size = Vector3(35.0, 0.20, 35.0)
 	collider.shape = shape
-	collider.position.y = -0.02
+	collider.position.y = -0.11
 	floor.add_child(collider)
 
-func _add_rock_collision(position: Vector3, scale_factor: float, yaw: float) -> void:
+func _add_rock_collision(position: Vector3, height: float, yaw: float) -> void:
 	var body := StaticBody3D.new()
 	body.name = "RockCollision"
 	body.position = position
@@ -156,16 +195,16 @@ func _add_rock_collision(position: Vector3, scale_factor: float, yaw: float) -> 
 	add_child(body)
 	var collider := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(2.25, 1.75, 2.20) * scale_factor
+	shape.size = Vector3(height * 1.05, height, height * 0.95)
 	collider.shape = shape
-	collider.position.y = shape.size.y * 0.48
+	collider.position.y = height * 0.5
 	body.add_child(collider)
 
 func _add_arena_boundaries() -> void:
-	_add_boundary(Vector3(0.0, 1.25, -ARENA_HALF_SIZE), Vector3(42.0, 2.5, 0.7))
-	_add_boundary(Vector3(0.0, 1.25, ARENA_HALF_SIZE), Vector3(42.0, 2.5, 0.7))
-	_add_boundary(Vector3(-ARENA_HALF_SIZE, 1.25, 0.0), Vector3(0.7, 2.5, 42.0))
-	_add_boundary(Vector3(ARENA_HALF_SIZE, 1.25, 0.0), Vector3(0.7, 2.5, 42.0))
+	_add_boundary(Vector3(0.0, 1.25, -ARENA_HALF_SIZE), Vector3(35.0, 2.5, 0.7))
+	_add_boundary(Vector3(0.0, 1.25, ARENA_HALF_SIZE), Vector3(35.0, 2.5, 0.7))
+	_add_boundary(Vector3(-ARENA_HALF_SIZE, 1.25, 0.0), Vector3(0.7, 2.5, 35.0))
+	_add_boundary(Vector3(ARENA_HALF_SIZE, 1.25, 0.0), Vector3(0.7, 2.5, 35.0))
 
 func _add_boundary(position: Vector3, size: Vector3) -> void:
 	var body := StaticBody3D.new()
@@ -198,7 +237,7 @@ func _build_gameplay() -> void:
 	hud.volume_changed.connect(combat_audio.set_master_volume)
 	hud.move_changed.connect(player.set_touch_move)
 	hud.look_delta.connect(player.add_touch_look)
-	combat_audio.set_master_volume(0.85)
+	combat_audio.set_master_volume(1.0)
 	player.connect("health_changed", Callable(hud, "set_health"))
 	player.connect("ammo_changed", Callable(hud, "set_ammo"))
 	player.connect("died", Callable(self, "_on_player_died"))

@@ -7,7 +7,7 @@ signal look_delta(value: Vector2)
 
 const FIRE_REPEAT := 0.105
 const JOYSTICK_RADIUS := 64.0
-const SAFE_MARGIN := 18.0
+const SAFE_MARGIN := 28.0
 
 var health_bar: ProgressBar
 var ammo_label: Label
@@ -47,8 +47,8 @@ func _build_ui() -> void:
 	var shade := ColorRect.new()
 	shade.name = "TopShade"
 	shade.anchor_right = 1.0
-	shade.offset_bottom = 104.0
-	shade.color = Color(0.02, 0.025, 0.02, 0.28)
+	shade.offset_bottom = 96.0
+	shade.color = Color(0.02, 0.025, 0.02, 0.24)
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(shade)
 
@@ -92,13 +92,13 @@ func _build_ui() -> void:
 	ammo_label.add_theme_constant_override("shadow_offset_y", 2)
 	root.add_child(ammo_label)
 
-	fire_button = _make_action_button("إطلاق", Color("a43b2d"), 24)
+	fire_button = _make_action_button("إطلاق", Color("a43b2d"), 22)
 	fire_button.name = "FireButton"
 	fire_button.button_down.connect(_start_fire)
 	fire_button.button_up.connect(_stop_fire)
 	root.add_child(fire_button)
 
-	reload_button = _make_action_button("تلقيم", Color("46554a"), 18)
+	reload_button = _make_action_button("تلقيم", Color("46554a"), 17)
 	reload_button.name = "ReloadButton"
 	reload_button.pressed.connect(reload_requested.emit)
 	root.add_child(reload_button)
@@ -153,48 +153,48 @@ func _layout_controls() -> void:
 		return
 	var viewport_size := get_viewport().get_visible_rect().size
 	var min_side := minf(viewport_size.x, viewport_size.y)
-	var ui_scale := clampf(min_side / 720.0, 0.72, 1.15)
+	var ui_scale := clampf(min_side / 720.0, 0.72, 1.12)
 	var right_margin := SAFE_MARGIN * ui_scale
 	var bottom_margin := SAFE_MARGIN * ui_scale
 
 	var status := root.get_node("Status") as Label
-	status.position = Vector2(20, 16) * ui_scale
-	status.size = Vector2(minf(460.0 * ui_scale, viewport_size.x * 0.58), 34.0 * ui_scale)
-	status.add_theme_font_size_override("font_size", int(20.0 * ui_scale))
+	status.position = Vector2(24, 16) * ui_scale
+	status.size = Vector2(minf(430.0 * ui_scale, viewport_size.x * 0.54), 34.0 * ui_scale)
+	status.add_theme_font_size_override("font_size", int(19.0 * ui_scale))
 
-	health_bar.position = Vector2(20, 56) * ui_scale
-	health_bar.size = Vector2(205, 18) * ui_scale
+	health_bar.position = Vector2(24, 54) * ui_scale
+	health_bar.size = Vector2(195, 17) * ui_scale
 
 	var sound := root.get_node("SoundButton") as Button
-	sound.size = Vector2(136, 40) * ui_scale
+	sound.size = Vector2(126, 38) * ui_scale
 	sound.position = Vector2(viewport_size.x - sound.size.x - right_margin, 16.0 * ui_scale)
 
-	var fire_size := 118.0 * ui_scale
+	var fire_size := 104.0 * ui_scale
 	fire_button.size = Vector2(fire_size, fire_size)
 	fire_button.position = Vector2(
 		viewport_size.x - fire_size - right_margin,
-		viewport_size.y - fire_size - bottom_margin - 54.0 * ui_scale
+		viewport_size.y - fire_size - bottom_margin
 	)
-	fire_button.add_theme_font_size_override("font_size", int(24.0 * ui_scale))
+	fire_button.add_theme_font_size_override("font_size", int(22.0 * ui_scale))
 
-	reload_button.size = Vector2(104, 54) * ui_scale
+	reload_button.size = Vector2(92, 50) * ui_scale
 	reload_button.position = Vector2(
-		viewport_size.x - reload_button.size.x - right_margin - 10.0 * ui_scale,
-		viewport_size.y - reload_button.size.y - bottom_margin
+		fire_button.position.x - reload_button.size.x - 16.0 * ui_scale,
+		fire_button.position.y + (fire_size - reload_button.size.y) * 0.5
 	)
-	reload_button.add_theme_font_size_override("font_size", int(18.0 * ui_scale))
+	reload_button.add_theme_font_size_override("font_size", int(17.0 * ui_scale))
 
-	ammo_label.size = Vector2(210, 42) * ui_scale
+	ammo_label.size = Vector2(190, 40) * ui_scale
 	ammo_label.position = Vector2(
 		viewport_size.x - ammo_label.size.x - right_margin,
-		fire_button.position.y - 48.0 * ui_scale
+		fire_button.position.y - 44.0 * ui_scale
 	)
-	ammo_label.add_theme_font_size_override("font_size", int(27.0 * ui_scale))
+	ammo_label.add_theme_font_size_override("font_size", int(25.0 * ui_scale))
 
-	var pad_size := 148.0 * ui_scale
+	var pad_size := 138.0 * ui_scale
 	joystick_base.size = Vector2(pad_size, pad_size)
-	joystick_base.position = Vector2(28.0 * ui_scale, viewport_size.y - pad_size - 28.0 * ui_scale)
-	var knob_size := 62.0 * ui_scale
+	joystick_base.position = Vector2(30.0 * ui_scale, viewport_size.y - pad_size - 30.0 * ui_scale)
+	var knob_size := 58.0 * ui_scale
 	joystick_knob.size = Vector2(knob_size, knob_size)
 	_reset_knob()
 
@@ -219,7 +219,7 @@ func _input(event: InputEvent) -> void:
 				look_touch = -1
 	elif event is InputEventScreenDrag:
 		if event.index == move_touch:
-			var scale := maxf(joystick_base.size.x / 148.0, 0.5)
+			var scale := maxf(joystick_base.size.x / 138.0, 0.5)
 			var delta: Vector2 = (event.position - move_origin) / (JOYSTICK_RADIUS * scale)
 			var clamped := delta.limit_length(1.0)
 			var center := (joystick_base.size - joystick_knob.size) * 0.5
@@ -235,8 +235,8 @@ func _place_move_pad(point: Vector2) -> void:
 	var size := get_viewport().get_visible_rect().size
 	var half := joystick_base.size * 0.5
 	joystick_base.position = Vector2(
-		clampf(point.x - half.x, 8.0, size.x * 0.48 - joystick_base.size.x),
-		clampf(point.y - half.y, size.y * 0.38, size.y - joystick_base.size.y - 8.0)
+		clampf(point.x - half.x, 10.0, size.x * 0.48 - joystick_base.size.x),
+		clampf(point.y - half.y, size.y * 0.38, size.y - joystick_base.size.y - 10.0)
 	)
 	_reset_knob()
 

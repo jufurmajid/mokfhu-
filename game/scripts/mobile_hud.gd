@@ -176,8 +176,8 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventScreenDrag:
 		if event.index == move_touch:
 			var scale := maxf(joystick_base.size.x / 140.0, 0.5)
-			var delta := (event.position - move_origin) / (JOYSTICK_RADIUS * scale)
-			var clamped := delta.limit_length(1.0)
+			var delta: Vector2 = (event.position - move_origin) / (JOYSTICK_RADIUS * scale)
+			var clamped: Vector2 = delta.limit_length(1.0)
 			var center := (joystick_base.size - joystick_knob.size) * 0.5
 			joystick_knob.position = center + clamped * (joystick_base.size.x * 0.25)
 			move_changed.emit(clamped)

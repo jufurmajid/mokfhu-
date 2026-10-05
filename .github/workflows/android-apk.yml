@@ -1,17 +1,17 @@
-name: Build Android APK
+name: Build Clean Android FPS Base
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-      - ai/realistic-rebuild
+      - "restart/**"
     paths:
       - "game/**"
       - ".github/workflows/android-apk.yml"
 
 concurrency:
-  group: realistic-android-${{ github.ref }}
+  group: clean-fps-base-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   android-debug:
-    name: Android debug APK
+    name: Android clean base APK
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     container:
@@ -29,15 +29,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Vendor ready-made 3D assets
+      - name: Vendor animated AK hands
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf game/vendor game/level
-          rm -rf /tmp/fpsarms
-
-          # Ready-made animated first-person AK + hands. Keep this rig unchanged:
-          # its reload/shoot animations are already working well in the game.
+          rm -rf game/vendor /tmp/fpsarms
           git clone --depth 1 --filter=blob:none --sparse https://github.com/Ayush-Mohanty/FPS-Arms-3D.git /tmp/fpsarms
           git -C /tmp/fpsarms sparse-checkout set Models/fps_ak-74m_animations
           mkdir -p game/vendor/viewmodel
@@ -45,68 +41,10 @@ jobs:
           cp /tmp/fpsarms/Models/fps_ak-74m_animations/scene.bin game/vendor/viewmodel/scene.bin
           cp -a /tmp/fpsarms/Models/fps_ak-74m_animations/textures game/vendor/viewmodel/textures
           cp /tmp/fpsarms/Models/fps_ak-74m_animations/license.txt game/vendor/viewmodel/LICENSE.txt
-
-          # Compact CC0 desert pieces and realistic tactical enemy poses.
-          if ! command -v python3 >/dev/null 2>&1; then
-            apt-get update -qq
-            apt-get install -y -qq python3 ca-certificates
-          fi
-          mkdir -p game/vendor/desert game/vendor/enemy
-          python3 - <<'PY'
-          from pathlib import Path
-          from urllib.request import Request, urlopen
-          import shutil
-
-          assets = {
-              "https://cdn.3dassets.dev/assets/38107/v1/model.glb": "game/vendor/desert/ground_light.glb",
-              "https://cdn.3dassets.dev/assets/38108/v1/model.glb": "game/vendor/desert/ground_dark.glb",
-              "https://cdn.3dassets.dev/assets/38109/v1/model.glb": "game/vendor/desert/sand_drift.glb",
-              "https://cdn.3dassets.dev/assets/133/v1/model.glb": "game/vendor/desert/rock_outcrop.glb",
-              "https://cdn.3dassets.dev/assets/27567/v1/model.glb": "game/vendor/enemy/assault_aim.glb",
-              "https://cdn.3dassets.dev/assets/27569/v1/model.glb": "game/vendor/enemy/assault_run.glb",
-          }
-          for url, output in assets.items():
-              path = Path(output)
-              path.parent.mkdir(parents=True, exist_ok=True)
-              request = Request(url, headers={"User-Agent": "Mokfhu-Godot-Build/1.0"})
-              with urlopen(request, timeout=90) as response, path.open("wb") as dst:
-                  shutil.copyfileobj(response, dst)
-              if path.stat().st_size < 1024:
-                  raise RuntimeError(f"Downloaded asset is unexpectedly small: {url}")
-              print(f"Downloaded {path} ({path.stat().st_size} bytes)")
-          PY
-
-          # 3dassets.dev intentionally uses KHR_mesh_quantization. Godot 4.3's
-          # importer rejects that required extension, so convert the tiny runtime
-          # assets to ordinary float geometry before Godot sees them.
-          NODE_MAJOR=0
-          if command -v node >/dev/null 2>&1; then
-            NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-          fi
-          if [ "$NODE_MAJOR" -lt 18 ]; then
-            apt-get update -qq
-            apt-get install -y -qq curl ca-certificates gnupg
-            curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-            apt-get install -y -qq nodejs
-          fi
-          npm install --global --no-audit --no-fund @gltf-transform/cli@4.5.1
-          for asset in game/vendor/desert/*.glb game/vendor/enemy/*.glb; do
-            converted="${asset%.glb}.dequantized.glb"
-            gltf-transform dequantize "$asset" "$converted"
-            mv "$converted" "$asset"
-          done
-
           test -s game/vendor/viewmodel/scene.gltf
           test -s game/vendor/viewmodel/scene.bin
-          test -s game/vendor/desert/ground_light.glb
-          test -s game/vendor/desert/ground_dark.glb
-          test -s game/vendor/desert/sand_drift.glb
-          test -s game/vendor/desert/rock_outcrop.glb
-          test -s game/vendor/enemy/assault_aim.glb
-          test -s game/vendor/enemy/assault_run.glb
-          du -sh game || true
 
-      - name: Configure Godot Android tools
+      - name: Configure Android tools
         shell: bash
         run: |
           set -euo pipefail
@@ -115,16 +53,14 @@ jobs:
             cp -a /root/.config/godot/. "$HOME/.config/godot/"
           fi
           cp -a "/root/.local/share/godot/export_templates/${GODOT_VERSION}.stable" "$HOME/.local/share/godot/export_templates/"
-
           if [ -d /usr/lib/android-sdk ]; then
             ANDROID_SDK="/usr/lib/android-sdk"
           elif [ -d /opt/android-sdk ]; then
             ANDROID_SDK="/opt/android-sdk"
           else
-            echo "Android SDK was not found in the Godot CI image."
+            echo "Android SDK not found"
             exit 1
           fi
-
           JAVA_BIN="$(readlink -f "$(command -v javac)")"
           JAVA_HOME_PATH="$(dirname "$(dirname "$JAVA_BIN")")"
           SETTINGS="$HOME/.config/godot/editor_settings-4.3.tres"
@@ -137,34 +73,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          timeout 12m godot --headless --editor --quit 2>&1 | tee /tmp/mokfhu-import.log
-          if grep -E "ERROR: GLTF:|Error importing|Failed loading resource" /tmp/mokfhu-import.log; then
-            echo "Godot asset import failed."
+          timeout 10m godot --headless --editor --quit 2>&1 | tee /tmp/import.log
+          if grep -E "ERROR:|SCRIPT ERROR|Parse Error|Error importing|Failed loading resource|MOKFHU_FATAL" /tmp/import.log; then
             exit 1
           fi
 
-      - name: Runtime smoke test
+      - name: Validate clean milestone
         working-directory: game
         shell: bash
         run: |
           set -euo pipefail
-          timeout 60s godot --headless --quit-after 120 --verbose 2>&1 | tee /tmp/mokfhu-smoke.log
-          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call|MOKFHU_FATAL|Failed loading resource" /tmp/mokfhu-smoke.log; then
-            echo "Runtime or visible-asset validation error detected."
+          timeout 90s godot --headless --audio-driver Dummy --script res://scripts/validate.gd --verbose 2>&1 | tee /tmp/validate.log
+          if grep -E "ERROR:|SCRIPT ERROR|Parse Error|MOKFHU_FATAL|Failed loading resource" /tmp/validate.log; then
             exit 1
           fi
-
-      - name: Comprehensive runtime asset validation
-        working-directory: game
-        shell: bash
-        run: |
-          set -euo pipefail
-          timeout 90s godot --headless --audio-driver Dummy --script res://scripts/validate.gd --verbose 2>&1 | tee /tmp/mokfhu-validate.log
-          if grep -E "ERROR:|SCRIPT ERROR|Parse Error|MOKFHU_FATAL|Failed loading resource" /tmp/mokfhu-validate.log; then
-            echo "Comprehensive runtime validation reported an error."
-            exit 1
-          fi
-          grep -F -- "--- MOKFHU VALIDATION PASSED SUCCESSFULLY ---" /tmp/mokfhu-validate.log
+          grep -F -- "--- CLEAN FPS BASE VALIDATION PASSED ---" /tmp/validate.log
 
       - name: Export debug APK
         shell: bash
@@ -172,18 +95,18 @@ jobs:
           set -euo pipefail
           mkdir -p build
           cd game
-          timeout 10m godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-realistic-debug.apk"
+          timeout 10m godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-clean-base-debug.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Mokfhu-Realistic-Android-debug
-          path: build/Mokfhu-realistic-debug.apk
+          name: Mokfhu-Clean-Base-Android
+          path: build/Mokfhu-clean-base-debug.apk
           if-no-files-found: error
           retention-days: 14
 
   publish-preview:
-    name: Publish external preview APK
+    name: Publish clean preview APK
     if: github.ref == 'refs/heads/main'
     needs: android-debug
     runs-on: ubuntu-24.04
@@ -193,25 +116,25 @@ jobs:
       - name: Download tested APK
         uses: actions/download-artifact@v4
         with:
-          name: Mokfhu-Realistic-Android-debug
+          name: Mokfhu-Clean-Base-Android
           path: release-apk
 
-      - name: Publish stable preview release
+      - name: Publish stable preview
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          APK="release-apk/Mokfhu-realistic-debug.apk"
+          APK="release-apk/Mokfhu-clean-base-debug.apk"
           test -s "$APK"
-          if gh release view realistic-preview --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload realistic-preview "$APK" --clobber --repo "$GITHUB_REPOSITORY"
+          if gh release view clean-base-preview --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload clean-base-preview "$APK" --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create realistic-preview "$APK" \
+            gh release create clean-base-preview "$APK" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title "Mokfhu Realistic Preview" \
-              --notes "Automated Android preview. This APK passed Godot import, runtime smoke test, visible-asset validation, and Android export."
+              --title "Mokfhu Clean FPS Base" \
+              --notes "Milestone 1: player, AK hands, touch controls and wide procedural sand test floor."
           fi
 
 env:

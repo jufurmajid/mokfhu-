@@ -1,7 +1,6 @@
-# Local binaries
+# Local Godot/editor files
 /godot
-
-# Godot imported files & build artifacts
 game/.godot/
 game/vendor/
+build/
 *.import

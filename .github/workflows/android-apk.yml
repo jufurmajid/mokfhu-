@@ -46,9 +46,7 @@ jobs:
           cp -a /tmp/fpsarms/Models/fps_ak-74m_animations/textures game/vendor/viewmodel/textures
           cp /tmp/fpsarms/Models/fps_ak-74m_animations/license.txt game/vendor/viewmodel/LICENSE.txt
 
-          # Download only a few tiny CC0 GLB assets for the compact desert arena
-          # and two realistic tactical enemy poses. This replaces the former large
-          # industrial level and its expensive runtime trimesh collisions.
+          # Compact CC0 desert pieces and realistic tactical enemy poses.
           if ! command -v python3 >/dev/null 2>&1; then
             apt-get update -qq
             apt-get install -y -qq python3 ca-certificates
@@ -125,8 +123,8 @@ jobs:
         run: |
           set -euo pipefail
           timeout 60s godot --headless --quit-after 120 --verbose 2>&1 | tee /tmp/mokfhu-smoke.log
-          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call" /tmp/mokfhu-smoke.log; then
-            echo "Runtime script error detected."
+          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call|MOKFHU_FATAL" /tmp/mokfhu-smoke.log; then
+            echo "Runtime or visible-asset validation error detected."
             exit 1
           fi
 
@@ -175,7 +173,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "Mokfhu Realistic Preview" \
-              --notes "Automated Android preview. This APK passed Godot import, runtime smoke test, and Android export."
+              --notes "Automated Android preview. This APK passed Godot import, runtime smoke test, visible-asset validation, and Android export."
           fi
 
 env:

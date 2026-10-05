@@ -86,6 +86,20 @@ func _run() -> void:
 			if hud.get(control_name) == null:
 				failures += _fail("HUD control missing: %s" % control_name)
 
+	# Stop any audio voice started by the fire validation and free the scene
+	# before quitting headless Godot. This avoids false-positive resource leak
+	# errors from the OGG playback object during CI shutdown.
+	if player != null:
+		var cleanup_shot := player.get("shot_audio") as AudioStreamPlayer
+		var cleanup_reload := player.get("reload_audio") as AudioStreamPlayer
+		if cleanup_shot != null:
+			cleanup_shot.stop()
+		if cleanup_reload != null:
+			cleanup_reload.stop()
+	field.queue_free()
+	await process_frame
+	await process_frame
+
 	if failures == 0:
 		print("--- CLEAN FPS BASE VALIDATION PASSED ---")
 		quit(0)

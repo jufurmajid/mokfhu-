@@ -97,6 +97,17 @@ jobs:
         shell: bash
         run: timeout 12m godot --headless --editor --quit
 
+      - name: Runtime smoke test
+        working-directory: game
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 60s godot --headless --quit-after 120 --verbose 2>&1 | tee /tmp/mokfhu-smoke.log
+          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call" /tmp/mokfhu-smoke.log; then
+            echo "Runtime script error detected."
+            exit 1
+          fi
+
       - name: Export debug APK
         shell: bash
         run: |

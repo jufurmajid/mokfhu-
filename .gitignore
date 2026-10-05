@@ -1,0 +1,7 @@
+# Local binaries
+/godot
+
+# Godot imported files & build artifacts
+game/.godot/
+game/vendor/
+*.import

@@ -78,7 +78,12 @@ func _model_bounds(root: Node3D) -> AABB:
 		if mesh_instance == null or mesh_instance.mesh == null:
 			continue
 		var box := mesh_instance.get_aabb()
-		var relative: Transform3D = root.global_transform.affine_inverse() * mesh_instance.global_transform
+		var relative := Transform3D.IDENTITY
+		var curr: Node = mesh_instance
+		while curr != null and curr != root:
+			if curr is Node3D:
+				relative = (curr as Node3D).transform * relative
+			curr = curr.get_parent()
 		for xi in range(2):
 			for yi in range(2):
 				for zi in range(2):
@@ -184,6 +189,7 @@ func _die() -> void:
 	is_dead = true
 	velocity = Vector3.ZERO
 	set_physics_process(false)
+	set_process(false)
 	if is_instance_valid(body_collision):
 		body_collision.set_deferred("disabled", true)
 	_set_running_pose(false)

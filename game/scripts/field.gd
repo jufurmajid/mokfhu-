@@ -17,8 +17,9 @@ const PLAYER_SPAWN := Vector3(0.0, 1.0, 13.0)
 const ENEMY_SPAWNS := [
 	Vector3(-10.0, 1.0, -10.0),
 	Vector3(10.0, 1.0, -10.0),
-	Vector3(-10.0, 1.0, 1.0),
-	Vector3(10.0, 1.0, 2.0)
+	Vector3(-11.0, 1.0, 1.0),
+	Vector3(11.0, 1.0, 2.0),
+	Vector3(0.0, 1.0, -14.0)
 ]
 
 const ROCK_LAYOUT := [
@@ -148,7 +149,12 @@ func _model_bounds(root: Node3D) -> AABB:
 		if mesh_instance == null or mesh_instance.mesh == null:
 			continue
 		var box := mesh_instance.get_aabb()
-		var relative: Transform3D = root.global_transform.affine_inverse() * mesh_instance.global_transform
+		var relative := Transform3D.IDENTITY
+		var curr: Node = mesh_instance
+		while curr != null and curr != root:
+			if curr is Node3D:
+				relative = (curr as Node3D).transform * relative
+			curr = curr.get_parent()
 		for xi in range(2):
 			for yi in range(2):
 				for zi in range(2):
@@ -237,6 +243,8 @@ func _build_gameplay() -> void:
 	hud.volume_changed.connect(combat_audio.set_master_volume)
 	hud.move_changed.connect(player.set_touch_move)
 	hud.look_delta.connect(player.add_touch_look)
+	if hud.has_signal("restart_requested"):
+		hud.connect("restart_requested", Callable(self, "restart_game"))
 	combat_audio.set_master_volume(1.0)
 	player.connect("health_changed", Callable(hud, "set_health"))
 	player.connect("ammo_changed", Callable(hud, "set_ammo"))
@@ -262,13 +270,37 @@ func _spawn_enemies() -> void:
 func _on_enemy_died(_enemy: Node3D) -> void:
 	remaining = maxi(0, remaining - 1)
 	_update_status()
-	if remaining == 0 and is_instance_valid(status_label):
-		status_label.text = "تم تأمين الساحة"
+	if remaining == 0:
+		if is_instance_valid(status_label):
+			status_label.text = "تم تأمين المنطقة"
+		if is_instance_valid(hud) and hud.has_method("show_restart_button"):
+			hud.call("show_restart_button", true, "تم تأمين المنطقة")
 
 func _on_player_died() -> void:
 	if is_instance_valid(status_label):
-		status_label.text = "انتهت المهمة — أعد المحاولة"
+		status_label.text = "انتهت المهمة"
+	if is_instance_valid(hud) and hud.has_method("show_restart_button"):
+		hud.call("show_restart_button", true, "انتهت المهمة")
 
 func _update_status() -> void:
 	if is_instance_valid(status_label):
 		status_label.text = "الساحة الصحراوية  •  أعداء متبقون: %d" % remaining
+
+func restart_game() -> void:
+	for child in get_children():
+		if child.get_script() == preload("res://scripts/projectile.gd"):
+			child.queue_free()
+
+	for enemy in enemies:
+		if is_instance_valid(enemy):
+			enemy.queue_free()
+	enemies.clear()
+
+	if is_instance_valid(player):
+		player.queue_free()
+	if is_instance_valid(hud):
+		hud.queue_free()
+	if is_instance_valid(combat_audio):
+		combat_audio.queue_free()
+
+	_build_gameplay()

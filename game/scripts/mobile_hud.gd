@@ -1,6 +1,7 @@
 extends CanvasLayer
 signal fire_requested
 signal reload_requested
+signal restart_requested
 signal volume_changed(value: float)
 signal move_changed(value: Vector2)
 signal look_delta(value: Vector2)
@@ -13,6 +14,7 @@ var health_bar: ProgressBar
 var ammo_label: Label
 var fire_button: Button
 var reload_button: Button
+var restart_button: Button
 var joystick_base: Panel
 var joystick_knob: Panel
 var root: Control
@@ -108,6 +110,12 @@ func _build_ui() -> void:
 	sound_button.pressed.connect(_cycle_volume.bind(sound_button))
 	root.add_child(sound_button)
 
+	restart_button = _make_action_button("إعادة المحاولة", Color("2d5232"), 20)
+	restart_button.name = "RestartButton"
+	restart_button.visible = false
+	restart_button.pressed.connect(func(): restart_requested.emit())
+	root.add_child(restart_button)
+
 	joystick_base = Panel.new()
 	joystick_base.name = "MovePad"
 	joystick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -197,6 +205,17 @@ func _layout_controls() -> void:
 	var knob_size := 58.0 * ui_scale
 	joystick_knob.size = Vector2(knob_size, knob_size)
 	_reset_knob()
+
+	if is_instance_valid(restart_button):
+		restart_button.size = Vector2(220, 56) * ui_scale
+		restart_button.position = (viewport_size - restart_button.size) * 0.5 + Vector2(0, 40 * ui_scale)
+
+func show_restart_button(visible_flag: bool, message: String = "") -> void:
+	if is_instance_valid(restart_button):
+		restart_button.visible = visible_flag
+	var status := root.get_node_or_null("Status") as Label
+	if is_instance_valid(status) and not message.is_empty():
+		status.text = message
 
 func _input(event: InputEvent) -> void:
 	var size := get_viewport().get_visible_rect().size

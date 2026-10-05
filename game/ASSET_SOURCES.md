@@ -1,41 +1,22 @@
-# Runtime asset sources
+# Asset sources
 
-The Android build vendors ready-made 3D assets at build time so the visible combat presentation does not use primitive box/capsule placeholder art.
+## First-person AK-74M arms
 
-## First-person arms and rifle
+The build vendors the animated first-person AK-74M + hands model at build time.
 
-- Asset: **FPS AK-74m animations**
-- Author: **Cransh**
-- Source mirror used by CI: `Ayush-Mohanty/FPS-Arms-3D`, folder `Models/fps_ak-74m_animations`
-- Original source: Sketchfab model `fps-ak-74m-animations-94be8385c402474cacd39bc096c6ca14`
-- License: **CC BY 4.0**
-- Runtime animations used: `Rig|AK_Idle`, `Rig|AK_Walk`, `Rig|AK_Shot`, `Rig|AK_Reload_full`
+- Repository mirror: `Ayush-Mohanty/FPS-Arms-3D`
+- Folder: `Models/fps_ak-74m_animations`
+- Original model author: Cransh
+- License: CC BY 4.0
+- Animations used: `Rig|AK_Idle`, `Rig|AK_Walk`, `Rig|AK_Shot`, `Rig|AK_Reload_full`
 
-Credit required by the model license:
+Required attribution:
 > This work is based on "FPS AK-74m animations" by Cransh, licensed under CC BY 4.0.
 
-## Compact desert arena
+## User audio
 
-The heavy industrial TPS level was removed for the mobile build. The new arena is approximately 42 x 42 metres and uses small ready-made CC0 GLB assets from **3DAssets.dev**:
+The existing audio clips under `assets/audio/` are preserved from the project owner's uploads. The clean first milestone uses only the local player shot and reload click.
 
-- `Desert Ground Module` — asset ID `38107`, CC0 1.0
-- `Desert Ground Module Dark` — asset ID `38108`, CC0 1.0
-- `Sand Drift` — asset ID `38109`, CC0 1.0
-- `Frontier sandstone outcrop` — asset ID `133`, CC0 1.0
+## Test environment
 
-The two 6 m ground modules are instanced with different rotations to form the floor. Rock outcrops and sand drifts are instanced as cover and dressing. Only invisible gameplay collision boxes are generated in code; no visible primitive boxes are used for the environment.
-
-## Realistic tactical enemy
-
-The previous stylized low-poly enemy was replaced with two realistic tactical operator poses from the **Tactical Shooter Hill Town** pack on 3DAssets.dev:
-
-- `Assault Trooper Standing Aim Pose` — asset ID `27567`, CC0 1.0
-- `Assault Trooper Running Pose` — asset ID `27569`, CC0 1.0
-
-The enemy controller switches between the running and aiming authored meshes depending on movement/fire state. The models include the tactical uniform, helmet, plate carrier and rifle as authored geometry. Invisible capsule collision is used only for gameplay physics.
-
-## User-provided assets
-
-The user-provided `ak_47.glb` was inspected and contains a skin plus real `Fire` and `Reload` animations. The user-provided `soldier.glb` was also inspected, but it contains no skeleton, skin, or animations. The connected repository writer cannot directly commit these Library binary uploads, so the build uses the licensed ready-made assets above while preserving the user's original combat audio files already stored in the repository.
-
-No art, audio, or models are extracted from commercial games such as Combat Master or Modern Combat.
+The ground is generated inside Godot with a PlaneMesh and a custom procedural sand shader. No third-party environment model or texture pack is used in this milestone.

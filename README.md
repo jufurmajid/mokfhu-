@@ -1,14 +1,15 @@
-# Mokfhu — Android Combat Game
+# Mokfhu — Clean Mobile FPS Rebuild
 
-A new Android-focused combat game project. Repository inspection confirmed that the repository was empty, so no pre-existing engine or gameplay systems were available to preserve.
+This repository has been reset to a deliberately small first milestone.
 
-The project is being scaffolded with Godot 4 and a mobile-first playable prototype. APK export is intentionally not part of development commits; build one only when Jaafar explicitly requests: “صدر”.
+Current scope only:
+- first-person player
+- animated AK-74M hands viewmodel
+- mobile movement/look/fire/reload controls
+- one large high-quality procedural sand test floor
+- mobile-friendly lighting and sky
 
-## Current scope
+There are no enemies, combat AI, missions, buildings, rocks, or other gameplay systems in this milestone.
 
-- Android-first controls and performance settings.
-- Original field-combat visual direction.
-- Spatial weapon audio using the supplied sound files.
-- No copying of another game's design.
-
-See the project files for setup and controls.
+The previous project state is preserved on the branch:
+`archive/pre-clean-restart-20261006`

@@ -64,13 +64,18 @@ func _play_local(stream: AudioStream, offset_db: float, cost: int, pitch: float)
 	)
 	voice.play()
 
+func _exit_tree() -> void:
+	for child in get_children():
+		if child is AudioStreamPlayer or child is AudioStreamPlayer3D:
+			child.stop()
+			child.queue_free()
+
 func _play_3d(stream: AudioStream, at: Vector3, offset_db: float, range_m: float, cost: int, cutoff_hz: float = 16000.0, filter_db: float = -2.0) -> void:
 	if active_voices >= MAX_VOICES:
 		return
 	active_voices += cost
 	var voice := AudioStreamPlayer3D.new()
 	voice.stream = stream
-	voice.global_position = at
 	voice.volume_db = master_db + offset_db
 	voice.max_distance = range_m
 	voice.unit_size = 4.0

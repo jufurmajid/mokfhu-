@@ -154,6 +154,18 @@ jobs:
             exit 1
           fi
 
+      - name: Comprehensive runtime asset validation
+        working-directory: game
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90s godot --headless --audio-driver Dummy --script res://scripts/validate.gd --verbose 2>&1 | tee /tmp/mokfhu-validate.log
+          if grep -E "ERROR:|SCRIPT ERROR|Parse Error|MOKFHU_FATAL|Failed loading resource" /tmp/mokfhu-validate.log; then
+            echo "Comprehensive runtime validation reported an error."
+            exit 1
+          fi
+          grep -F -- "--- MOKFHU VALIDATION PASSED SUCCESSFULLY ---" /tmp/mokfhu-validate.log
+
       - name: Export debug APK
         shell: bash
         run: |

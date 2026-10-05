@@ -10,6 +10,10 @@ on:
       - "game/**"
       - ".github/workflows/android-apk.yml"
 
+concurrency:
+  group: realistic-android-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -17,6 +21,7 @@ jobs:
   android-debug:
     name: Android debug APK
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     container:
       image: barichello/godot-ci:4.3
 
@@ -31,6 +36,7 @@ jobs:
           rm -rf game/vendor game/level
           rm -rf /tmp/fpsarms /tmp/tps /tmp/storm
 
+          # Ready-made animated first-person AK + hands.
           git clone --depth 1 --filter=blob:none --sparse https://github.com/Ayush-Mohanty/FPS-Arms-3D.git /tmp/fpsarms
           git -C /tmp/fpsarms sparse-checkout set Models/fps_ak-74m_animations
           mkdir -p game/vendor/viewmodel
@@ -39,13 +45,15 @@ jobs:
           cp -a /tmp/fpsarms/Models/fps_ak-74m_animations/textures game/vendor/viewmodel/textures
           cp /tmp/fpsarms/Models/fps_ak-74m_animations/license.txt game/vendor/viewmodel/LICENSE.txt
 
+          # Only the authored visible map GLB is vendored. Importing the whole TPS demo
+          # pulled thousands of unused textures/scenes and previously hit GitHub's 6h limit.
           git clone --depth 1 --filter=blob:none --sparse --branch 4.2-f0587b2 https://github.com/godotengine/tps-demo.git /tmp/tps
-          git -C /tmp/tps sparse-checkout set level/geometry level/textures LICENSE.md
+          git -C /tmp/tps sparse-checkout set --no-cone '/level/geometry/models/structure.glb' '/LICENSE.md'
           mkdir -p game/level
-          cp -a /tmp/tps/level/geometry game/level/geometry
-          cp -a /tmp/tps/level/textures game/level/textures
+          cp /tmp/tps/level/geometry/models/structure.glb game/level/structure.glb
           cp /tmp/tps/LICENSE.md game/level/TPS_DEMO_LICENSE.md
 
+          # Ready-made realistic enemy character.
           git clone --depth 1 --filter=blob:none --sparse https://github.com/mars-tw/storm-apocalypse.git /tmp/storm
           git -C /tmp/storm sparse-checkout set public/models/custom/characters
           mkdir -p game/vendor/enemy
@@ -55,7 +63,8 @@ jobs:
           test -s game/vendor/viewmodel/scene.gltf
           test -s game/vendor/viewmodel/scene.bin
           test -s game/vendor/enemy/enemy.glb
-          test -s game/level/geometry/scenes/structure.tscn
+          test -s game/level/structure.glb
+          du -sh game || true
 
       - name: Configure Godot Android tools
         shell: bash
@@ -85,7 +94,8 @@ jobs:
 
       - name: Import project
         working-directory: game
-        run: godot --headless --editor --quit
+        shell: bash
+        run: timeout 12m godot --headless --editor --quit
 
       - name: Export debug APK
         shell: bash
@@ -93,7 +103,7 @@ jobs:
           set -euo pipefail
           mkdir -p build
           cd game
-          godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-realistic-debug.apk"
+          timeout 10m godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-realistic-debug.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

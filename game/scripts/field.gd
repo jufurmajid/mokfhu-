@@ -4,6 +4,7 @@ const PLAYER_SCRIPT = preload("res://scripts/player_controller.gd")
 const ENEMY_SCRIPT = preload("res://scripts/enemy.gd")
 const AUDIO_SCRIPT = preload("res://scripts/combat_audio.gd")
 const HUD_SCRIPT = preload("res://scripts/mobile_hud.gd")
+const MAP_PATH := "res://level/structure.glb"
 
 const PLAYER_SPAWN := Vector3(64.8183, -1.00, 78.7639)
 const ENEMY_SPAWNS := [
@@ -63,18 +64,39 @@ func _build_environment() -> void:
 	add_child(sun)
 
 func _build_authored_level() -> void:
-	_add_level_scene("res://level/geometry/scenes/structure.tscn", "IndustrialStructure")
-	_add_level_scene("res://level/geometry/scenes/props.tscn", "AuthoredProps")
-	_add_level_scene("res://level/geometry/scenes/core.tscn", "CoreArchitecture")
-
-func _add_level_scene(path: String, label: String) -> void:
-	var packed := load(path) as PackedScene
+	var packed := load(MAP_PATH) as PackedScene
 	if packed == null:
-		push_error("Ready-made level scene is missing: %s" % path)
+		push_error("Ready-made authored map is missing: %s" % MAP_PATH)
 		return
-	var instance := packed.instantiate()
-	instance.name = label
-	add_child(instance)
+	var map_instance := packed.instantiate() as Node3D
+	if map_instance == null:
+		push_error("Ready-made authored map could not be instantiated")
+		return
+	map_instance.name = "AuthoredCombatMap"
+	add_child(map_instance)
+	_add_runtime_map_collisions(map_instance)
+	_add_invisible_safety_floor()
+
+func _add_runtime_map_collisions(map_root: Node3D) -> void:
+	# The visible map stays 100% authored 3D geometry. These generated collision
+	# bodies are invisible and let the player/enemies interact with the real mesh.
+	var meshes := map_root.find_children("*", "MeshInstance3D", true, false)
+	for node in meshes:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance != null and mesh_instance.mesh != null:
+			mesh_instance.create_trimesh_collision()
+
+func _add_invisible_safety_floor() -> void:
+	# Invisible fallback only; no primitive geometry is rendered to the player.
+	var floor := StaticBody3D.new()
+	floor.name = "SafetyFloor"
+	floor.position = Vector3(0, -14.25, 0)
+	add_child(floor)
+	var collider := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(280, 1.0, 280)
+	collider.shape = shape
+	floor.add_child(collider)
 
 func _build_gameplay() -> void:
 	combat_audio = AUDIO_SCRIPT.new()

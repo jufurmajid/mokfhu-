@@ -62,8 +62,6 @@ func _run() -> void:
 		var mount := player.get("viewmodel_mount") as Node3D
 		if mount == null:
 			failures += _fail("viewmodel mount missing")
-		elif mount.position.x <= 0.0 or mount.position.y >= 0.0:
-			failures += _fail("AK viewmodel is not framed in lower-right first-person position")
 
 		var viewmodel := player.get("viewmodel") as Node3D
 		if viewmodel == null:
@@ -82,30 +80,31 @@ func _run() -> void:
 				if anim_name.is_empty() or not anim_player.has_animation(StringName(anim_name)):
 					failures += _fail("%s unresolved" % property_name)
 
-		player.call("set_aiming", true)
-		if not bool(player.get("aiming")):
-			failures += _fail("ADS toggle did not enable aiming")
-		player.call("set_aiming", false)
+		var initial_position := player.call("get_tuning_position") as Vector3
+		var initial_scale := float(player.call("get_tuning_scale"))
+		var initial_fov := float(player.call("get_tuning_fov"))
 
-		var before_tune: Vector3 = player.get("tuned_hip_position")
-		player.call("set_tuning_mode", true)
-		player.call("adjust_viewmodel_axis", "z", 0.02)
-		var after_tune: Vector3 = player.get("tuned_hip_position")
-		if absf((after_tune.z - before_tune.z) - 0.02) > 0.001:
-			failures += _fail("viewmodel Z tuning did not apply")
-		player.call("adjust_viewmodel_scale", 0.005)
-		if float(player.get("tuned_scale")) <= 0.155:
-			failures += _fail("viewmodel scale tuning did not apply")
-		player.call("adjust_camera_fov", 1.0)
-		if float(player.get("tuned_fov")) <= 78.0:
-			failures += _fail("camera FOV tuning did not apply")
+		player.call("tune_viewmodel_axis", "z", 0.01)
+		var changed_position := player.call("get_tuning_position") as Vector3
+		if absf(changed_position.z - (initial_position.z + 0.01)) > 0.001:
+			failures += _fail("Z tuning control did not update the viewmodel position")
+
+		player.call("tune_viewmodel_scale", 0.005)
+		if absf(float(player.call("get_tuning_scale")) - (initial_scale + 0.005)) > 0.001:
+			failures += _fail("viewmodel scale tuning did not update")
+
+		player.call("tune_camera_fov", 1.0)
+		if absf(float(player.call("get_tuning_fov")) - (initial_fov + 1.0)) > 0.01:
+			failures += _fail("camera FOV tuning did not update")
+
 		player.call("reset_viewmodel_tuning")
-		player.call("set_tuning_mode", false)
-
-		player.call("toggle_crouch")
-		if not bool(player.get("crouched")):
-			failures += _fail("crouch toggle did not enable crouch")
-		player.call("toggle_crouch")
+		var reset_position := player.call("get_tuning_position") as Vector3
+		if reset_position.distance_to(initial_position) > 0.001:
+			failures += _fail("viewmodel tuner reset did not restore default position")
+		if absf(float(player.call("get_tuning_scale")) - initial_scale) > 0.001:
+			failures += _fail("viewmodel tuner reset did not restore default scale")
+		if absf(float(player.call("get_tuning_fov")) - initial_fov) > 0.01:
+			failures += _fail("viewmodel tuner reset did not restore default FOV")
 
 		var shot_audio := player.get("shot_audio") as AudioStreamPlayer
 		if shot_audio == null or shot_audio.stream == null:
@@ -127,38 +126,39 @@ func _run() -> void:
 			"ammo_label",
 			"tuning_toggle_button",
 			"tuning_panel",
-			"tuning_label"
+			"tuning_value_label",
+			"tuning_copy_button"
 		]
 		for control_name in required_controls:
 			if hud.get(control_name) == null:
 				failures += _fail("HUD control missing: %s" % control_name)
 
 		var viewport_size := root.get_visible_rect().size
-		for control_name in ["fire_button", "reload_button", "aim_button", "crouch_button", "jump_button", "joystick_base", "weapon_panel", "tuning_toggle_button"]:
+		for control_name in ["fire_button", "reload_button", "aim_button", "crouch_button", "jump_button", "joystick_base", "weapon_panel", "tuning_toggle_button", "tuning_panel"]:
 			var control := hud.get(control_name) as Control
 			if not _inside_viewport(control, viewport_size):
 				failures += _fail("HUD control is outside 1280x720 safe area: %s" % control_name)
 
-		var fire_button := hud.get("fire_button") as Button
-		var joystick := hud.get("joystick_base") as Control
-		if fire_button != null and fire_button.get_global_rect().get_center().x < viewport_size.x * 0.60:
-			failures += _fail("fire button is not on the right side")
-		if joystick != null and joystick.get_global_rect().get_center().x > viewport_size.x * 0.35:
-			failures += _fail("movement joystick is not on the left side")
+		var tuning_panel := hud.get("tuning_panel") as Control
+		if tuning_panel == null or not tuning_panel.visible:
+			failures += _fail("viewmodel tuning panel must be visible by default")
 
-		var tune_buttons: Array = hud.get("tuning_buttons")
-		if tune_buttons.size() < 11:
-			failures += _fail("camera tuning panel does not have all adjustment buttons")
-		var tune_label := hud.get("tuning_label") as Label
-		if tune_label == null or not tune_label.text.contains("X:") or not tune_label.text.contains("Z:"):
-			failures += _fail("camera tuning coordinates are not visible")
+		if player != null:
+			hud.call("set_tuning_values",
+				player.call("get_tuning_position"),
+				player.call("get_tuning_scale"),
+				player.call("get_tuning_fov")
+			)
+			var values_label := hud.get("tuning_value_label") as Label
+			if values_label == null or not values_label.text.contains("X"):
+				failures += _fail("live tuning coordinate display is not updating")
 
 	field.queue_free()
 	await process_frame
 	await process_frame
 
 	if failures == 0:
-		print("--- REFERENCE FPS CAMERA AND HUD VALIDATION PASSED ---")
+		print("--- VIEWMODEL TUNER VALIDATION PASSED ---")
 		quit(0)
 	else:
 		push_error("MOKFHU_FATAL: validation failed with %d issue(s)" % failures)

@@ -80,30 +80,30 @@ func _run() -> void:
 				if anim_name.is_empty() or not anim_player.has_animation(StringName(anim_name)):
 					failures += _fail("%s unresolved" % property_name)
 
-		var initial_position := player.call("get_tuning_position") as Vector3
-		var initial_scale := float(player.call("get_tuning_scale"))
-		var initial_fov := float(player.call("get_tuning_fov"))
+		var initial_position := player.get("tuned_hip_position") as Vector3
+		var initial_scale := float(player.get("tuned_scale"))
+		var initial_fov := float(player.get("tuned_fov"))
 
-		player.call("tune_viewmodel_axis", "z", 0.01)
-		var changed_position := player.call("get_tuning_position") as Vector3
+		player.call("adjust_viewmodel_axis", "z", 0.01)
+		var changed_position := player.get("tuned_hip_position") as Vector3
 		if absf(changed_position.z - (initial_position.z + 0.01)) > 0.001:
 			failures += _fail("Z tuning control did not update the viewmodel position")
 
-		player.call("tune_viewmodel_scale", 0.005)
-		if absf(float(player.call("get_tuning_scale")) - (initial_scale + 0.005)) > 0.001:
+		player.call("adjust_viewmodel_scale", 0.005)
+		if absf(float(player.get("tuned_scale")) - (initial_scale + 0.005)) > 0.001:
 			failures += _fail("viewmodel scale tuning did not update")
 
-		player.call("tune_camera_fov", 1.0)
-		if absf(float(player.call("get_tuning_fov")) - (initial_fov + 1.0)) > 0.01:
+		player.call("adjust_camera_fov", 1.0)
+		if absf(float(player.get("tuned_fov")) - (initial_fov + 1.0)) > 0.01:
 			failures += _fail("camera FOV tuning did not update")
 
 		player.call("reset_viewmodel_tuning")
-		var reset_position := player.call("get_tuning_position") as Vector3
+		var reset_position := player.get("tuned_hip_position") as Vector3
 		if reset_position.distance_to(initial_position) > 0.001:
 			failures += _fail("viewmodel tuner reset did not restore default position")
-		if absf(float(player.call("get_tuning_scale")) - initial_scale) > 0.001:
+		if absf(float(player.get("tuned_scale")) - initial_scale) > 0.001:
 			failures += _fail("viewmodel tuner reset did not restore default scale")
-		if absf(float(player.call("get_tuning_fov")) - initial_fov) > 0.01:
+		if absf(float(player.get("tuned_fov")) - initial_fov) > 0.01:
 			failures += _fail("viewmodel tuner reset did not restore default FOV")
 
 		var shot_audio := player.get("shot_audio") as AudioStreamPlayer
@@ -145,9 +145,9 @@ func _run() -> void:
 
 		if player != null:
 			hud.call("set_tuning_values",
-				player.call("get_tuning_position"),
-				player.call("get_tuning_scale"),
-				player.call("get_tuning_fov")
+				player.get("tuned_hip_position"),
+				player.get("tuned_scale"),
+				player.get("tuned_fov")
 			)
 			var values_label := hud.get("tuning_value_label") as Label
 			if values_label == null or not values_label.text.contains("X"):

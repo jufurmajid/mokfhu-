@@ -123,4 +123,5 @@ func _build_player_and_controls() -> void:
 	player.ammo_changed.connect(hud.set_ammo)
 	player.viewmodel_tuning_changed.connect(hud.set_tuning_values)
 	player.emit_ammo()
+	player.set_tuning_mode(true)
 	player.emit_tuning_state()

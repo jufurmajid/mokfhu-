@@ -227,7 +227,7 @@ func _spawn_enemies() -> void:
 		enemy.set("player", player)
 		enemy.set("combat_audio", combat_audio)
 		enemy.position = ENEMY_SPAWNS[index]
-		enemy.died.connect(_on_enemy_died)
+		enemy.connect("died", Callable(self, "_on_enemy_died"))
 		add_child(enemy)
 		enemies.append(enemy)
 	remaining = enemies.size()

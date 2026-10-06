@@ -105,9 +105,14 @@ func _build_player_and_controls() -> void:
 	hud = HUD_SCRIPT.new()
 	hud.name = "MobileHUD"
 	add_child(hud)
+
 	hud.move_changed.connect(player.set_touch_move)
 	hud.look_delta.connect(player.add_touch_look)
 	hud.fire_requested.connect(player.request_fire)
 	hud.reload_requested.connect(player.reload)
+	hud.jump_requested.connect(player.request_jump)
+	hud.crouch_requested.connect(player.toggle_crouch)
+	hud.aim_changed.connect(player.set_aiming)
+
 	player.ammo_changed.connect(hud.set_ammo)
 	player.emit_ammo()

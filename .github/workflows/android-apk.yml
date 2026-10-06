@@ -12,7 +12,7 @@ on:
       - ".github/workflows/android-apk.yml"
 
 concurrency:
-  group: clean-fps-base-${{ github.ref }}-${{ github.sha }}
+  group: clean-fps-base-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

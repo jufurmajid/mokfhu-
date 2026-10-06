@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - "restart/**"
+      - "ui/**"
     paths:
       - "game/**"
       - ".github/workflows/android-apk.yml"
@@ -87,7 +88,7 @@ jobs:
           if grep -E "ERROR:|SCRIPT ERROR|Parse Error|MOKFHU_FATAL|Failed loading resource" /tmp/validate.log; then
             exit 1
           fi
-          grep -F -- "--- CLEAN FPS BASE VALIDATION PASSED ---" /tmp/validate.log
+          grep -F -- "--- REFERENCE FPS CAMERA AND HUD VALIDATION PASSED ---" /tmp/validate.log
 
       - name: Export debug APK
         shell: bash

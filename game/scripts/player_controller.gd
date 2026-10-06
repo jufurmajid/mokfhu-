@@ -1,7 +1,6 @@
 extends CharacterBody3D
 
 signal ammo_changed(current: int, reserve: int)
-signal tuning_changed(position: Vector3, scale_value: float, fov_value: float)
 signal viewmodel_tuning_changed(position: Vector3, scale: float, fov: float)
 
 const GRAVITY := 18.0
@@ -41,11 +40,6 @@ var crouched := false
 var walk_bob_time := 0.0
 var weapon_kick := 0.0
 
-# Runtime viewmodel tuner values. These are intentionally editable from the
-# mobile HUD so the final framing can be chosen on the real target phone.
-var tuning_position := VIEWMODEL_HIP_POSITION
-var tuning_scale := VIEWMODEL_SCALE
-var tuning_fov := BASE_FOV
 var tuning_mode := false
 var tuned_hip_position: Vector3 = VIEWMODEL_HIP_POSITION
 var tuned_ads_position: Vector3 = VIEWMODEL_ADS_POSITION
@@ -422,46 +416,6 @@ func reset_viewmodel_tuning() -> void:
 
 func emit_tuning_state() -> void:
 	viewmodel_tuning_changed.emit(tuned_hip_position, tuned_scale, tuned_fov)
-
-func tune_viewmodel_axis(axis_name: String, amount: float) -> void:
-	match axis_name:
-		"x":
-			tuning_position.x = clampf(tuning_position.x + amount, -0.60, 0.60)
-		"y":
-			tuning_position.y = clampf(tuning_position.y + amount, -0.90, 0.50)
-		"z":
-			tuning_position.z = clampf(tuning_position.z + amount, -1.50, -0.08)
-	emit_tuning()
-
-func tune_viewmodel_scale(amount: float) -> void:
-	tuning_scale = clampf(tuning_scale + amount, 0.05, 0.40)
-	if viewmodel != null:
-		viewmodel.scale = Vector3.ONE * tuning_scale
-	emit_tuning()
-
-func tune_camera_fov(amount: float) -> void:
-	tuning_fov = clampf(tuning_fov + amount, 55.0, 105.0)
-	emit_tuning()
-
-func reset_viewmodel_tuning() -> void:
-	tuning_position = VIEWMODEL_HIP_POSITION
-	tuning_scale = VIEWMODEL_SCALE
-	tuning_fov = BASE_FOV
-	if viewmodel != null:
-		viewmodel.scale = Vector3.ONE * tuning_scale
-	emit_tuning()
-
-func emit_tuning() -> void:
-	tuning_changed.emit(tuning_position, tuning_scale, tuning_fov)
-
-func get_tuning_position() -> Vector3:
-	return tuning_position
-
-func get_tuning_scale() -> float:
-	return tuning_scale
-
-func get_tuning_fov() -> float:
-	return tuning_fov
 
 func emit_ammo() -> void:
 	ammo_changed.emit(magazine, reserve_ammo)

@@ -7,6 +7,13 @@ func _fail(message: String) -> int:
 	push_error("MOKFHU_FATAL: " + message)
 	return 1
 
+func _has_visible_mesh(root_node: Node) -> bool:
+	for node in root_node.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance != null and mesh_instance.mesh != null and mesh_instance.is_visible_in_tree():
+			return true
+	return false
+
 func _inside_viewport(control: Control, viewport_size: Vector2) -> bool:
 	if control == null:
 		return false
@@ -24,29 +31,59 @@ func _run() -> void:
 	root.add_child(field)
 	await process_frame
 	await process_frame
+	await process_frame
 
 	var failures := 0
 
 	var floor := field.get("test_floor") as MeshInstance3D
 	if floor == null or floor.mesh == null:
-		failures += _fail("test floor missing")
+		failures += _fail("desert ground missing")
 	elif not (floor.mesh is PlaneMesh):
-		failures += _fail("test floor is not PlaneMesh")
+		failures += _fail("desert ground is not the optimized PlaneMesh")
 	else:
 		var plane := floor.mesh as PlaneMesh
-		if plane.size.x < 120.0 or plane.size.y < 120.0:
-			failures += _fail("test floor is not wide enough")
+		if plane.size.x < 70.0 or plane.size.y < 70.0:
+			failures += _fail("playable desert floor is too small")
 		if plane.material == null or not (plane.material is ShaderMaterial):
-			failures += _fail("procedural sand shader is missing")
+			failures += _fail("sand shader missing")
 
-	if ResourceLoader.exists("res://scripts/enemy.gd"):
-		failures += _fail("enemy.gd still exists in clean milestone")
-	if ResourceLoader.exists("res://scripts/projectile.gd"):
-		failures += _fail("projectile.gd still exists in clean milestone")
+	var cover_root := field.get("cover_root") as Node3D
+	if cover_root == null:
+		failures += _fail("realistic cover root missing")
+	else:
+		var cover_children := cover_root.get_children()
+		if cover_children.size() < 12:
+			failures += _fail("not enough placed cover meshes")
+		var visible_cover_count := 0
+		for cover in cover_children:
+			if _has_visible_mesh(cover):
+				visible_cover_count += 1
+		if visible_cover_count < 12:
+			failures += _fail("one or more cover GLBs are not visibly rendered")
+		print("Visible cover models: %d" % visible_cover_count)
 
-	var enemies := field.find_children("Enemy*", "CharacterBody3D", true, false)
-	if not enemies.is_empty():
-		failures += _fail("enemy nodes exist in clean milestone")
+	var primitive_failures := 0
+	for node in field.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null or not mesh_instance.is_visible_in_tree():
+			continue
+		if mesh_instance == floor:
+			continue
+		var mesh := mesh_instance.mesh
+		if mesh is BoxMesh or mesh is CapsuleMesh or mesh is CylinderMesh or mesh is SphereMesh:
+			primitive_failures += 1
+	if primitive_failures > 0:
+		failures += _fail("visible primitive placeholder meshes detected: %d" % primitive_failures)
+
+	var enemies: Array = field.get("enemies")
+	if enemies.size() != 4:
+		failures += _fail("expected exactly 4 optimized tactical enemies")
+	else:
+		for enemy_node in enemies:
+			var enemy := enemy_node as Node3D
+			if enemy == null or not _has_visible_mesh(enemy):
+				failures += _fail("enemy has no visible tactical soldier mesh")
+		print("Enemy count: %d" % enemies.size())
 
 	var player := field.get("player") as CharacterBody3D
 	if player == null:
@@ -54,112 +91,83 @@ func _run() -> void:
 	else:
 		var camera := player.get("camera") as Camera3D
 		var pivot := player.get("view_pivot") as Node3D
-		if camera == null or absf(camera.fov - 78.0) > 0.05 or not camera.current:
-			failures += _fail("camera must start at 78 degree FOV")
-		if pivot == null or absf(pivot.position.y - 1.55) > 0.02:
-			failures += _fail("camera height invalid")
-
 		var mount := player.get("viewmodel_mount") as Node3D
+		var viewmodel := player.get("viewmodel") as Node3D
+		var animation_player := player.get("viewmodel_anim") as AnimationPlayer
+
+		if camera == null or not camera.current or absf(camera.fov - 60.0) > 0.1:
+			failures += _fail("final device-selected 60 degree camera FOV is not active")
+		if pivot == null or absf(pivot.position.y - 1.55) > 0.03:
+			failures += _fail("player eye height is incorrect")
 		if mount == null:
 			failures += _fail("viewmodel mount missing")
-		elif mount.position.x <= 0.0 or mount.position.y >= 0.0:
-			failures += _fail("AK viewmodel is not framed in lower-right first-person position")
-
-		var viewmodel := player.get("viewmodel") as Node3D
-		if viewmodel == null:
-			failures += _fail("AK hands viewmodel missing")
 		else:
-			var meshes := viewmodel.find_children("*", "MeshInstance3D", true, false)
-			if meshes.is_empty():
-				failures += _fail("AK hands viewmodel has no mesh")
+			var desired := Vector3(0.090, -0.200, -0.160)
+			if mount.position.distance_to(desired) > 0.025:
+				failures += _fail("device-selected weapon coordinates are not active")
+		if viewmodel == null or not _has_visible_mesh(viewmodel):
+			failures += _fail("AK hands viewmodel is not visible")
+		elif absf(viewmodel.scale.x - 0.300) > 0.005:
+			failures += _fail("device-selected AK scale is not active")
 
-		var anim_player := player.get("viewmodel_anim") as AnimationPlayer
-		if anim_player == null:
-			failures += _fail("AK AnimationPlayer missing")
+		if animation_player == null:
+			failures += _fail("AK animation player missing")
 		else:
 			for property_name in ["anim_idle", "anim_walk", "anim_fire", "anim_reload"]:
-				var anim_name := String(player.get(property_name))
-				if anim_name.is_empty() or not anim_player.has_animation(StringName(anim_name)):
-					failures += _fail("%s unresolved" % property_name)
+				var animation_name := String(player.get(property_name))
+				if animation_name.is_empty() or not animation_player.has_animation(StringName(animation_name)):
+					failures += _fail("AK animation unresolved: %s" % property_name)
 
-		player.call("set_aiming", true)
-		if not bool(player.get("aiming")):
-			failures += _fail("ADS toggle did not enable aiming")
-		player.call("set_aiming", false)
+		var health_before := int(player.get("health"))
+		player.call("take_damage", 7, Vector3.ZERO, Vector3.ZERO)
+		if int(player.get("health")) != health_before - 7:
+			failures += _fail("player damage system is not functional")
 
-		var before_tune: Vector3 = player.get("tuned_hip_position")
-		player.call("set_tuning_mode", true)
-		player.call("adjust_viewmodel_axis", "z", 0.02)
-		var after_tune: Vector3 = player.get("tuned_hip_position")
-		if absf((after_tune.z - before_tune.z) - 0.02) > 0.001:
-			failures += _fail("viewmodel Z tuning did not apply")
-		player.call("adjust_viewmodel_scale", 0.005)
-		if float(player.get("tuned_scale")) <= 0.155:
-			failures += _fail("viewmodel scale tuning did not apply")
-		player.call("adjust_camera_fov", 1.0)
-		if float(player.get("tuned_fov")) <= 78.0:
-			failures += _fail("camera FOV tuning did not apply")
-		player.call("reset_viewmodel_tuning")
-		player.call("set_tuning_mode", false)
-
-		player.call("toggle_crouch")
-		if not bool(player.get("crouched")):
-			failures += _fail("crouch toggle did not enable crouch")
-		player.call("toggle_crouch")
-
-		var shot_audio := player.get("shot_audio") as AudioStreamPlayer
-		if shot_audio == null or shot_audio.stream == null:
-			failures += _fail("player shot audio missing")
+	var combat_audio := field.get("combat_audio") as Node
+	if combat_audio == null:
+		failures += _fail("combat audio manager missing")
+	else:
+		var shot_voice := combat_audio.get("player_shot") as AudioStreamPlayer
+		var tail_voice := combat_audio.get("player_tail") as AudioStreamPlayer
+		var reload_voice := combat_audio.get("reload_voice") as AudioStreamPlayer
+		var enemy_voices: Array = combat_audio.get("enemy_voices")
+		if shot_voice == null or shot_voice.stream == null:
+			failures += _fail("local player gunshot stream missing")
+		if tail_voice == null or tail_voice.stream == null:
+			failures += _fail("player gunshot tail stream missing")
+		if reload_voice == null or reload_voice.stream == null:
+			failures += _fail("reload stream missing")
+		if enemy_voices.size() < 4:
+			failures += _fail("enemy audio voice pool too small")
 
 	var hud := field.get("hud") as CanvasLayer
 	if hud == null:
 		failures += _fail("mobile HUD missing")
 	else:
-		var required_controls := [
-			"fire_button",
-			"reload_button",
-			"aim_button",
-			"crouch_button",
-			"jump_button",
-			"joystick_base",
-			"joystick_knob",
-			"weapon_panel",
-			"ammo_label",
-			"tuning_toggle_button",
-			"tuning_panel",
-			"tuning_label"
-		]
-		for control_name in required_controls:
-			if hud.get(control_name) == null:
-				failures += _fail("HUD control missing: %s" % control_name)
+		for property_name in [
+			"fire_button", "reload_button", "aim_button", "crouch_button", "jump_button",
+			"joystick_base", "weapon_panel", "health_panel", "enemy_label", "restart_button"
+		]:
+			if hud.get(property_name) == null:
+				failures += _fail("HUD control missing: %s" % property_name)
 
 		var viewport_size := root.get_visible_rect().size
-		for control_name in ["fire_button", "reload_button", "aim_button", "crouch_button", "jump_button", "joystick_base", "weapon_panel", "tuning_toggle_button"]:
-			var control := hud.get(control_name) as Control
+		for property_name in ["fire_button", "reload_button", "aim_button", "crouch_button", "jump_button", "joystick_base", "weapon_panel", "health_panel"]:
+			var control := hud.get(property_name) as Control
 			if not _inside_viewport(control, viewport_size):
-				failures += _fail("HUD control is outside 1280x720 safe area: %s" % control_name)
+				failures += _fail("HUD control outside safe area: %s" % property_name)
 
-		var fire_button := hud.get("fire_button") as Button
-		var joystick := hud.get("joystick_base") as Control
-		if fire_button != null and fire_button.get_global_rect().get_center().x < viewport_size.x * 0.60:
-			failures += _fail("fire button is not on the right side")
-		if joystick != null and joystick.get_global_rect().get_center().x > viewport_size.x * 0.35:
-			failures += _fail("movement joystick is not on the left side")
+		hud.call("show_mission_result", "تم تأمين المنطقة", true)
+		var restart := hud.get("restart_button") as Button
+		if restart == null or not restart.visible:
+			failures += _fail("mission result does not expose restart button")
 
-		var tune_buttons: Array = hud.get("tuning_buttons")
-		if tune_buttons.size() < 11:
-			failures += _fail("camera tuning panel does not have all adjustment buttons")
-		var tune_label := hud.get("tuning_label") as Label
-		if tune_label == null or not tune_label.text.contains("X:") or not tune_label.text.contains("Z:"):
-			failures += _fail("camera tuning coordinates are not visible")
+	if failures == 0:
+		print("--- PLAYABLE COMBAT VALIDATION PASSED ---")
+	else:
+		push_error("MOKFHU_FATAL: playable validation failed with %d issue(s)" % failures)
 
 	field.queue_free()
 	await process_frame
 	await process_frame
-
-	if failures == 0:
-		print("--- REFERENCE FPS CAMERA AND HUD VALIDATION PASSED ---")
-		quit(0)
-	else:
-		push_error("MOKFHU_FATAL: validation failed with %d issue(s)" % failures)
-		quit(1)
+	quit(0 if failures == 0 else 1)

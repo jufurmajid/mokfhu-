@@ -1,18 +1,17 @@
-name: Build Clean Android FPS Base
+name: Build Playable Android FPS
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-      - "restart/**"
-      - "ui/**"
+      - "feature/**"
     paths:
       - "game/**"
       - ".github/workflows/android-apk.yml"
 
 concurrency:
-  group: clean-fps-base-${{ github.ref }}
+  group: playable-fps-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -20,9 +19,9 @@ permissions:
 
 jobs:
   android-debug:
-    name: Android clean base APK
+    name: Android playable APK
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     container:
       image: barichello/godot-ci:4.3
 
@@ -30,11 +29,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Vendor animated AK hands
+      - name: Vendor optimized realistic assets
         shell: bash
         run: |
           set -euo pipefail
           rm -rf game/vendor /tmp/fpsarms
+
+          # Animated first-person AK-74M + hands.
           git clone --depth 1 --filter=blob:none --sparse https://github.com/Ayush-Mohanty/FPS-Arms-3D.git /tmp/fpsarms
           git -C /tmp/fpsarms sparse-checkout set Models/fps_ak-74m_animations
           mkdir -p game/vendor/viewmodel
@@ -42,8 +43,64 @@ jobs:
           cp /tmp/fpsarms/Models/fps_ak-74m_animations/scene.bin game/vendor/viewmodel/scene.bin
           cp -a /tmp/fpsarms/Models/fps_ak-74m_animations/textures game/vendor/viewmodel/textures
           cp /tmp/fpsarms/Models/fps_ak-74m_animations/license.txt game/vendor/viewmodel/LICENSE.txt
+
+          if ! command -v python3 >/dev/null 2>&1; then
+            apt-get update -qq
+            apt-get install -y -qq python3 ca-certificates
+          fi
+
+          mkdir -p game/vendor/cover game/vendor/enemy
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          import shutil
+
+          assets = {
+              "https://cdn.3dassets.dev/assets/28257/v1/model.glb": "game/vendor/cover/sandbag.glb",
+              "https://cdn.3dassets.dev/assets/28258/v1/model.glb": "game/vendor/cover/jersey.glb",
+              "https://cdn.3dassets.dev/assets/28213/v1/model.glb": "game/vendor/cover/blast_wall.glb",
+              "https://cdn.3dassets.dev/assets/133/v1/model.glb": "game/vendor/cover/rock.glb",
+              "https://cdn.3dassets.dev/assets/27567/v1/model.glb": "game/vendor/enemy/assault_aim.glb",
+              "https://cdn.3dassets.dev/assets/27569/v1/model.glb": "game/vendor/enemy/assault_run.glb",
+          }
+
+          for url, output in assets.items():
+              path = Path(output)
+              request = Request(url, headers={"User-Agent": "Mokfhu-Android-Build/2.0"})
+              with urlopen(request, timeout=90) as response, path.open("wb") as dst:
+                  shutil.copyfileobj(response, dst)
+              if path.stat().st_size < 1024:
+                  raise RuntimeError(f"Downloaded asset is unexpectedly small: {url}")
+              print(f"Downloaded {path}: {path.stat().st_size} bytes")
+          PY
+
+          # Godot 4.3 CI rejects KHR_mesh_quantization in these files.
+          NODE_MAJOR=0
+          if command -v node >/dev/null 2>&1; then
+            NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+          fi
+          if [ "$NODE_MAJOR" -lt 18 ]; then
+            apt-get update -qq
+            apt-get install -y -qq curl ca-certificates gnupg
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+            apt-get install -y -qq nodejs
+          fi
+          npm install --global --no-audit --no-fund @gltf-transform/cli@4.5.1
+
+          for asset in game/vendor/cover/*.glb game/vendor/enemy/*.glb; do
+            converted="${asset%.glb}.dequantized.glb"
+            gltf-transform dequantize "$asset" "$converted"
+            mv "$converted" "$asset"
+          done
+
           test -s game/vendor/viewmodel/scene.gltf
-          test -s game/vendor/viewmodel/scene.bin
+          test -s game/vendor/cover/sandbag.glb
+          test -s game/vendor/cover/jersey.glb
+          test -s game/vendor/cover/blast_wall.glb
+          test -s game/vendor/cover/rock.glb
+          test -s game/vendor/enemy/assault_aim.glb
+          test -s game/vendor/enemy/assault_run.glb
+          du -sh game/vendor || true
 
       - name: Configure Android tools
         shell: bash
@@ -54,6 +111,7 @@ jobs:
             cp -a /root/.config/godot/. "$HOME/.config/godot/"
           fi
           cp -a "/root/.local/share/godot/export_templates/${GODOT_VERSION}.stable" "$HOME/.local/share/godot/export_templates/"
+
           if [ -d /usr/lib/android-sdk ]; then
             ANDROID_SDK="/usr/lib/android-sdk"
           elif [ -d /opt/android-sdk ]; then
@@ -62,6 +120,7 @@ jobs:
             echo "Android SDK not found"
             exit 1
           fi
+
           JAVA_BIN="$(readlink -f "$(command -v javac)")"
           JAVA_HOME_PATH="$(dirname "$(dirname "$JAVA_BIN")")"
           SETTINGS="$HOME/.config/godot/editor_settings-4.3.tres"
@@ -74,12 +133,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          timeout 10m godot --headless --editor --quit 2>&1 | tee /tmp/import.log
-          if grep -E "ERROR:|SCRIPT ERROR|Parse Error|Error importing|Failed loading resource|MOKFHU_FATAL" /tmp/import.log; then
+          timeout 12m godot --headless --editor --quit 2>&1 | tee /tmp/import.log
+          if grep -E "ERROR:|SCRIPT ERROR|Parse Error|Error importing|Failed loading resource|MOKFHU_FATAL|KHR_mesh_quantization" /tmp/import.log; then
             exit 1
           fi
 
-      - name: Validate clean milestone
+      - name: Runtime smoke test
+        working-directory: game
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 60s godot --headless --audio-driver Dummy --quit-after 90 --verbose 2>&1 | tee /tmp/smoke.log
+          if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call|MOKFHU_FATAL|Failed loading resource" /tmp/smoke.log; then
+            exit 1
+          fi
+
+      - name: Validate playable combat
         working-directory: game
         shell: bash
         run: |
@@ -88,7 +157,7 @@ jobs:
           if grep -E "ERROR:|SCRIPT ERROR|Parse Error|MOKFHU_FATAL|Failed loading resource" /tmp/validate.log; then
             exit 1
           fi
-          grep -F -- "--- REFERENCE FPS CAMERA AND HUD VALIDATION PASSED ---" /tmp/validate.log
+          grep -F -- "--- PLAYABLE COMBAT VALIDATION PASSED ---" /tmp/validate.log
 
       - name: Export debug APK
         shell: bash
@@ -96,18 +165,18 @@ jobs:
           set -euo pipefail
           mkdir -p build
           cd game
-          timeout 10m godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-clean-base-debug.apk"
+          timeout 10m godot --headless --verbose --export-debug "Android Debug" "$(pwd)/../build/Mokfhu-playable-debug.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Mokfhu-Clean-Base-Android
-          path: build/Mokfhu-clean-base-debug.apk
+          name: Mokfhu-Playable-Android
+          path: build/Mokfhu-playable-debug.apk
           if-no-files-found: error
           retention-days: 14
 
   publish-preview:
-    name: Publish clean preview APK
+    name: Publish playable preview APK
     if: github.ref == 'refs/heads/main'
     needs: android-debug
     runs-on: ubuntu-24.04
@@ -117,25 +186,21 @@ jobs:
       - name: Download tested APK
         uses: actions/download-artifact@v4
         with:
-          name: Mokfhu-Clean-Base-Android
+          name: Mokfhu-Playable-Android
           path: release-apk
 
-      - name: Publish stable preview
+      - name: Publish playable preview
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          APK="release-apk/Mokfhu-clean-base-debug.apk"
+          APK="release-apk/Mokfhu-playable-debug.apk"
           test -s "$APK"
-          if gh release view clean-base-preview --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload clean-base-preview "$APK" --clobber --repo "$GITHUB_REPOSITORY"
+          if gh release view playable-preview --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload playable-preview "$APK" --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create clean-base-preview "$APK" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "Mokfhu Clean FPS Base" \
-              --notes "Milestone 1: player, AK hands, touch controls and wide procedural sand test floor."
+            gh release create playable-preview "$APK"               --repo "$GITHUB_REPOSITORY"               --target "$GITHUB_SHA"               --title "Mokfhu Playable Combat Preview"               --notes "Small optimized Android FPS combat mission with realistic GLB cover, tactical enemies, final device-tuned AK framing and pooled combat audio."
           fi
 
 env:

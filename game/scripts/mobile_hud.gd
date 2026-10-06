@@ -8,15 +8,18 @@ signal aim_changed(active: bool)
 signal move_changed(value: Vector2)
 signal look_delta(value: Vector2)
 
-signal tuning_mode_changed(active: bool)
-signal tuning_axis_requested(axis: String, amount: float)
-signal tuning_scale_requested(amount: float)
-signal tuning_fov_requested(amount: float)
-signal tuning_reset_requested
+signal tune_axis_requested(axis_name: String, amount: float)
+signal tune_scale_requested(amount: float)
+signal tune_fov_requested(amount: float)
+signal tune_reset_requested
 
 const FIRE_REPEAT := 0.105
 const JOYSTICK_RADIUS := 68.0
 const SAFE_MARGIN := 22.0
+
+const TUNE_POSITION_STEP := 0.01
+const TUNE_SCALE_STEP := 0.005
+const TUNE_FOV_STEP := 1.0
 
 var root: Control
 var weapon_panel: Panel
@@ -32,9 +35,10 @@ var joystick_knob: Panel
 
 var tuning_toggle_button: Button
 var tuning_panel: Panel
-var tuning_label: Label
-var tuning_buttons: Array[Button] = []
-var tuning_active := false
+var tuning_value_label: Label
+var tuning_copy_button: Button
+var tuning_hit_controls: Array = []
+var tuning_text := "X=0.160 Y=-0.180 Z=-0.560 | SCALE=0.155 | FOV=78.0"
 
 var move_origin := Vector2.ZERO
 var move_touch := -1
@@ -123,17 +127,17 @@ func _build_ui() -> void:
 	crouch_button = _make_round_button("انحناء", 13, 0.42)
 	crouch_button.name = "CrouchButton"
 	crouch_button.toggle_mode = true
-	crouch_button.toggled.connect(func(_pressed: bool): crouch_requested.emit())
+	crouch_button.toggled.connect(_on_crouch_toggled)
 	root.add_child(crouch_button)
 
 	jump_button = _make_round_button("قفز", 14, 0.42)
 	jump_button.name = "JumpButton"
-	jump_button.pressed.connect(jump_requested.emit)
+	jump_button.pressed.connect(_on_jump_pressed)
 	root.add_child(jump_button)
 
 	reload_button = _make_round_button("تلقيم", 13, 0.42)
 	reload_button.name = "ReloadButton"
-	reload_button.pressed.connect(reload_requested.emit)
+	reload_button.pressed.connect(_on_reload_pressed)
 	root.add_child(reload_button)
 
 	joystick_base = Panel.new()
@@ -158,79 +162,125 @@ func _build_ui() -> void:
 	joystick_knob.add_theme_stylebox_override("panel", knob_style)
 	joystick_base.add_child(joystick_knob)
 
-	_build_tuning_ui()
+	_build_tuning_panel()
 
-func _build_tuning_ui() -> void:
-	tuning_toggle_button = _make_tune_button("ضبط السلاح")
+func _build_tuning_panel() -> void:
+	tuning_toggle_button = _make_tune_button("إخفاء الضبط")
 	tuning_toggle_button.name = "TuningToggle"
-	tuning_toggle_button.toggle_mode = true
-	tuning_toggle_button.toggled.connect(_on_tuning_toggled)
+	tuning_toggle_button.pressed.connect(_toggle_tuning_panel)
 	root.add_child(tuning_toggle_button)
+	tuning_hit_controls.append(tuning_toggle_button)
 
 	tuning_panel = Panel.new()
-	tuning_panel.name = "TuningPanel"
-	tuning_panel.visible = false
-	tuning_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var tune_style := StyleBoxFlat.new()
-	tune_style.bg_color = Color(0.015, 0.018, 0.02, 0.86)
-	tune_style.border_color = Color(1, 1, 1, 0.22)
-	tune_style.set_border_width_all(1)
-	tune_style.set_corner_radius_all(10)
-	tuning_panel.add_theme_stylebox_override("panel", tune_style)
+	tuning_panel.name = "ViewmodelTuner"
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.015, 0.02, 0.02, 0.78)
+	style.border_color = Color(1, 1, 1, 0.18)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(10)
+	tuning_panel.add_theme_stylebox_override("panel", style)
 	root.add_child(tuning_panel)
 
-	tuning_label = Label.new()
-	tuning_label.name = "TuningCoordinates"
-	tuning_label.text = "X: 0.160   Y: -0.180\nZ: -0.560   Scale: 0.155\nFOV: 78.0"
-	tuning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tuning_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	tuning_label.add_theme_font_size_override("font_size", 15)
-	tuning_label.add_theme_color_override("font_color", Color("fff2cf"))
-	tuning_panel.add_child(tuning_label)
+	var title := Label.new()
+	title.text = "ضبط السلاح والكاميرا"
+	title.position = Vector2(14, 10)
+	title.size = Vector2(340, 30)
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color("fff2d1"))
+	tuning_panel.add_child(title)
 
-	_add_tune_axis_button("يسار", 0, 0, "x", -0.01)
-	_add_tune_axis_button("يمين", 0, 1, "x", 0.01)
-	_add_tune_axis_button("فوك", 1, 0, "y", 0.01)
-	_add_tune_axis_button("جوه", 1, 1, "y", -0.01)
-	_add_tune_axis_button("قرب", 2, 0, "z", 0.02)
-	_add_tune_axis_button("بعد", 2, 1, "z", -0.02)
-	_add_tune_scale_button("كبر", 3, 0, 0.005)
-	_add_tune_scale_button("صغر", 3, 1, -0.005)
-	_add_tune_fov_button("FOV -", 4, 0, -1.0)
-	_add_tune_fov_button("FOV +", 4, 1, 1.0)
+	tuning_value_label = Label.new()
+	tuning_value_label.name = "TuningValues"
+	tuning_value_label.text = "X 0.160   Y -0.180   Z -0.560\nScale 0.155   FOV 78.0"
+	tuning_value_label.position = Vector2(14, 40)
+	tuning_value_label.size = Vector2(340, 52)
+	tuning_value_label.add_theme_font_size_override("font_size", 15)
+	tuning_value_label.add_theme_color_override("font_color", Color.WHITE)
+	tuning_panel.add_child(tuning_value_label)
 
-	var reset_button := _make_tune_button("إرجاع الافتراضي")
-	reset_button.name = "TuneReset"
-	reset_button.set_meta("tune_row", 5)
-	reset_button.set_meta("tune_col", 0)
-	reset_button.set_meta("tune_wide", true)
-	reset_button.pressed.connect(func(): tuning_reset_requested.emit())
+	_add_axis_row("X يمين / يسار", 98.0, "x")
+	_add_axis_row("Y فوق / جوه", 136.0, "y")
+	_add_axis_row("Z قرب / بعد", 174.0, "z")
+
+	var scale_label := _make_tune_row_label("Scale", 212.0)
+	tuning_panel.add_child(scale_label)
+	var scale_minus := _make_tune_button("-")
+	scale_minus.position = Vector2(196, 210)
+	scale_minus.size = Vector2(64, 32)
+	scale_minus.pressed.connect(_on_tune_scale_pressed.bind(-TUNE_SCALE_STEP))
+	tuning_panel.add_child(scale_minus)
+	tuning_hit_controls.append(scale_minus)
+	var scale_plus := _make_tune_button("+")
+	scale_plus.position = Vector2(270, 210)
+	scale_plus.size = Vector2(64, 32)
+	scale_plus.pressed.connect(_on_tune_scale_pressed.bind(TUNE_SCALE_STEP))
+	tuning_panel.add_child(scale_plus)
+	tuning_hit_controls.append(scale_plus)
+
+	var fov_label := _make_tune_row_label("FOV", 250.0)
+	tuning_panel.add_child(fov_label)
+	var fov_minus := _make_tune_button("-")
+	fov_minus.position = Vector2(196, 248)
+	fov_minus.size = Vector2(64, 32)
+	fov_minus.pressed.connect(_on_tune_fov_pressed.bind(-TUNE_FOV_STEP))
+	tuning_panel.add_child(fov_minus)
+	tuning_hit_controls.append(fov_minus)
+	var fov_plus := _make_tune_button("+")
+	fov_plus.position = Vector2(270, 248)
+	fov_plus.size = Vector2(64, 32)
+	fov_plus.pressed.connect(_on_tune_fov_pressed.bind(TUNE_FOV_STEP))
+	tuning_panel.add_child(fov_plus)
+	tuning_hit_controls.append(fov_plus)
+
+	var reset_button := _make_tune_button("إعادة")
+	reset_button.position = Vector2(14, 289)
+	reset_button.size = Vector2(104, 38)
+	reset_button.pressed.connect(_on_tune_reset_pressed)
 	tuning_panel.add_child(reset_button)
-	tuning_buttons.append(reset_button)
+	tuning_hit_controls.append(reset_button)
 
-func _add_tune_axis_button(caption: String, row: int, column: int, axis: String, amount: float) -> void:
-	var button := _make_tune_button(caption)
-	button.set_meta("tune_row", row)
-	button.set_meta("tune_col", column)
-	button.pressed.connect(_on_tune_axis.bind(axis, amount))
-	tuning_panel.add_child(button)
-	tuning_buttons.append(button)
+	tuning_copy_button = _make_tune_button("نسخ القيم")
+	tuning_copy_button.position = Vector2(128, 289)
+	tuning_copy_button.size = Vector2(130, 38)
+	tuning_copy_button.pressed.connect(_copy_tuning_values)
+	tuning_panel.add_child(tuning_copy_button)
+	tuning_hit_controls.append(tuning_copy_button)
 
-func _add_tune_scale_button(caption: String, row: int, column: int, amount: float) -> void:
-	var button := _make_tune_button(caption)
-	button.set_meta("tune_row", row)
-	button.set_meta("tune_col", column)
-	button.pressed.connect(_on_tune_scale.bind(amount))
-	tuning_panel.add_child(button)
-	tuning_buttons.append(button)
+	var hint := Label.new()
+	hint.text = "كل ضغطة: XYZ = 0.01 | Scale = 0.005 | FOV = 1"
+	hint.position = Vector2(14, 334)
+	hint.size = Vector2(340, 24)
+	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.66))
+	tuning_panel.add_child(hint)
 
-func _add_tune_fov_button(caption: String, row: int, column: int, amount: float) -> void:
-	var button := _make_tune_button(caption)
-	button.set_meta("tune_row", row)
-	button.set_meta("tune_col", column)
-	button.pressed.connect(_on_tune_fov.bind(amount))
-	tuning_panel.add_child(button)
-	tuning_buttons.append(button)
+func _add_axis_row(caption: String, y: float, axis_name: String) -> void:
+	var row_label := _make_tune_row_label(caption, y)
+	tuning_panel.add_child(row_label)
+
+	var minus_button := _make_tune_button("-")
+	minus_button.position = Vector2(196, y - 2)
+	minus_button.size = Vector2(64, 32)
+	minus_button.pressed.connect(_on_tune_axis_pressed.bind(axis_name, -TUNE_POSITION_STEP))
+	tuning_panel.add_child(minus_button)
+	tuning_hit_controls.append(minus_button)
+
+	var plus_button := _make_tune_button("+")
+	plus_button.position = Vector2(270, y - 2)
+	plus_button.size = Vector2(64, 32)
+	plus_button.pressed.connect(_on_tune_axis_pressed.bind(axis_name, TUNE_POSITION_STEP))
+	tuning_panel.add_child(plus_button)
+	tuning_hit_controls.append(plus_button)
+
+func _make_tune_row_label(caption: String, y: float) -> Label:
+	var label := Label.new()
+	label.text = caption
+	label.position = Vector2(14, y)
+	label.size = Vector2(170, 30)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	return label
 
 func _make_round_button(caption: String, font_size: int, alpha: float) -> Button:
 	var button := Button.new()
@@ -265,19 +315,17 @@ func _make_tune_button(caption: String) -> Button:
 	var button := Button.new()
 	button.text = caption
 	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 14)
+	button.add_theme_font_size_override("font_size", 13)
 	button.add_theme_color_override("font_color", Color.WHITE)
-	button.add_theme_color_override("font_pressed_color", Color.WHITE)
 
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.10, 0.115, 0.12, 0.90)
-	normal.border_color = Color(1, 1, 1, 0.18)
+	normal.bg_color = Color(0.10, 0.12, 0.12, 0.92)
+	normal.border_color = Color(1, 1, 1, 0.22)
 	normal.set_border_width_all(1)
-	normal.set_corner_radius_all(7)
+	normal.set_corner_radius_all(6)
 
 	var pressed := normal.duplicate() as StyleBoxFlat
-	pressed.bg_color = Color(0.28, 0.31, 0.31, 0.96)
-	pressed.border_color = Color(1, 1, 1, 0.48)
+	pressed.bg_color = Color(0.28, 0.32, 0.32, 0.98)
 
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", normal)
@@ -348,34 +396,13 @@ func _layout_controls() -> void:
 	joystick_knob.size = Vector2(knob_size, knob_size)
 	_reset_knob()
 
-	_layout_tuning(ui_scale)
-
-func _layout_tuning(ui_scale: float) -> void:
 	tuning_toggle_button.position = Vector2(18, 18) * ui_scale
-	tuning_toggle_button.size = Vector2(122, 42) * ui_scale
-	tuning_toggle_button.add_theme_font_size_override("font_size", int(14.0 * ui_scale))
+	tuning_toggle_button.size = Vector2(124, 38) * ui_scale
+	tuning_toggle_button.add_theme_font_size_override("font_size", int(13.0 * ui_scale))
 
-	tuning_panel.position = Vector2(18, 68) * ui_scale
-	tuning_panel.size = Vector2(312, 294) * ui_scale
-
-	tuning_label.position = Vector2(10, 8) * ui_scale
-	tuning_label.size = Vector2(292, 62) * ui_scale
-	tuning_label.add_theme_font_size_override("font_size", int(15.0 * ui_scale))
-
-	var button_width := 138.0 * ui_scale
-	var button_height := 32.0 * ui_scale
-	var left_x := 12.0 * ui_scale
-	var right_x := 162.0 * ui_scale
-	var row_start := 74.0 * ui_scale
-	var row_step := 36.0 * ui_scale
-
-	for button in tuning_buttons:
-		var row := int(button.get_meta("tune_row", 0))
-		var column := int(button.get_meta("tune_col", 0))
-		var wide := bool(button.get_meta("tune_wide", false))
-		button.position = Vector2(left_x if column == 0 else right_x, row_start + row_step * row)
-		button.size = Vector2(288.0 * ui_scale if wide else button_width, button_height)
-		button.add_theme_font_size_override("font_size", int(13.0 * ui_scale))
+	tuning_panel.position = Vector2(18, 66) * ui_scale
+	tuning_panel.size = Vector2(370, 370)
+	tuning_panel.scale = Vector2.ONE * ui_scale
 
 func _input(event: InputEvent) -> void:
 	var size := get_viewport().get_visible_rect().size
@@ -415,10 +442,13 @@ func _update_joystick(point: Vector2) -> void:
 
 func _point_hits_action(point: Vector2) -> bool:
 	for control in [fire_button, reload_button, aim_button, crouch_button, jump_button, tuning_toggle_button]:
-		if control != null and control.get_global_rect().has_point(point):
+		if control != null and control.visible and control.get_global_rect().has_point(point):
 			return true
-	if tuning_active and tuning_panel != null and tuning_panel.get_global_rect().has_point(point):
-		return true
+
+	if tuning_panel != null and tuning_panel.visible:
+		if tuning_panel.get_global_rect().has_point(point):
+			return true
+
 	return false
 
 func _reset_knob() -> void:
@@ -435,31 +465,57 @@ func _stop_fire() -> void:
 func _on_aim_toggled(active: bool) -> void:
 	aim_changed.emit(active)
 
-func _on_tuning_toggled(active: bool) -> void:
-	tuning_active = active
-	tuning_panel.visible = active
-	if active and aim_button != null and aim_button.button_pressed:
-		aim_button.button_pressed = false
-	tuning_mode_changed.emit(active)
+func _on_crouch_toggled(_active: bool) -> void:
+	crouch_requested.emit()
 
-func _on_tune_axis(axis: String, amount: float) -> void:
-	tuning_axis_requested.emit(axis, amount)
+func _on_jump_pressed() -> void:
+	jump_requested.emit()
 
-func _on_tune_scale(amount: float) -> void:
-	tuning_scale_requested.emit(amount)
+func _on_reload_pressed() -> void:
+	reload_requested.emit()
 
-func _on_tune_fov(amount: float) -> void:
-	tuning_fov_requested.emit(amount)
+func _toggle_tuning_panel() -> void:
+	tuning_panel.visible = not tuning_panel.visible
+	tuning_toggle_button.text = "إخفاء الضبط" if tuning_panel.visible else "إظهار الضبط"
+
+func _on_tune_axis_pressed(axis_name: String, amount: float) -> void:
+	tune_axis_requested.emit(axis_name, amount)
+
+func _on_tune_scale_pressed(amount: float) -> void:
+	tune_scale_requested.emit(amount)
+
+func _on_tune_fov_pressed(amount: float) -> void:
+	tune_fov_requested.emit(amount)
+
+func _on_tune_reset_pressed() -> void:
+	tune_reset_requested.emit()
 
 func set_tuning_values(position: Vector3, scale_value: float, fov_value: float) -> void:
-	if tuning_label != null:
-		tuning_label.text = "X: %.3f   Y: %.3f\nZ: %.3f   Scale: %.3f\nFOV: %.1f" % [
+	tuning_text = "X=%.3f Y=%.3f Z=%.3f | SCALE=%.3f | FOV=%.1f" % [
+		position.x,
+		position.y,
+		position.z,
+		scale_value,
+		fov_value
+	]
+	if tuning_value_label != null:
+		tuning_value_label.text = "X %.3f   Y %.3f   Z %.3f\nScale %.3f   FOV %.1f" % [
 			position.x,
 			position.y,
 			position.z,
 			scale_value,
 			fov_value
 		]
+
+func _copy_tuning_values() -> void:
+	DisplayServer.clipboard_set(tuning_text)
+	if tuning_copy_button != null:
+		tuning_copy_button.text = "تم النسخ ✓"
+		get_tree().create_timer(1.2).timeout.connect(_restore_copy_button)
+
+func _restore_copy_button() -> void:
+	if is_instance_valid(tuning_copy_button):
+		tuning_copy_button.text = "نسخ القيم"
 
 func set_ammo(current: int, reserve: int) -> void:
 	if ammo_label != null:

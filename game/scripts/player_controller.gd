@@ -344,13 +344,8 @@ func _fire_hitscan() -> void:
 
 	var collider := hit.get("collider") as Object
 	if collider != null and collider.has_method("take_damage"):
-		var was_alive := true
-		if "is_dead" in collider:
-			was_alive = not bool(collider.get("is_dead"))
 		collider.call("take_damage", WEAPON_DAMAGE, hit.get("position", Vector3.ZERO), direction)
-		var killed := false
-		if was_alive and "is_dead" in collider:
-			killed = bool(collider.get("is_dead"))
+		var killed := bool(collider.get("is_dead"))
 		hit_confirmed.emit(killed)
 
 func reload() -> void:

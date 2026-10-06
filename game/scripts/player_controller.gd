@@ -4,13 +4,23 @@ signal ammo_changed(current: int, reserve: int)
 
 const GRAVITY := 18.0
 const WALK_SPEED := 5.0
+const CROUCH_SPEED := 3.2
+const JUMP_VELOCITY := 6.2
 const MAGAZINE_SIZE := 30
 const SHOT_INTERVAL := 0.105
 const DEFAULT_RELOAD_SECONDS := 2.25
 
+const BASE_FOV := 78.0
+const ADS_FOV := 64.0
+const STANDING_EYE_HEIGHT := 1.55
+const CROUCH_EYE_HEIGHT := 1.08
+const LOOK_SENSITIVITY := 0.00215
+const ADS_LOOK_MULTIPLIER := 0.72
+
 const VIEWMODEL_PATH := "res://vendor/viewmodel/scene.gltf"
-const VIEWMODEL_POSITION := Vector3(0.20, -0.21, -0.58)
-const VIEWMODEL_SCALE := 0.145
+const VIEWMODEL_HIP_POSITION := Vector3(0.16, -0.18, -0.56)
+const VIEWMODEL_ADS_POSITION := Vector3(0.055, -0.135, -0.47)
+const VIEWMODEL_SCALE := 0.155
 const VIEWMODEL_ROTATION_DEGREES := Vector3(-3.0, 180.0, 1.0)
 
 const PLAYER_SHOT = preload("res://assets/audio/صوت سلاح الاعب .ogg")
@@ -24,6 +34,10 @@ var shot_cooldown := 0.0
 var reloading := false
 var reload_timer := 0.0
 var animation_locked := false
+var aiming := false
+var crouched := false
+var walk_bob_time := 0.0
+var weapon_kick := 0.0
 
 var camera: Camera3D
 var view_pivot: Node3D
@@ -33,6 +47,8 @@ var viewmodel_anim: AnimationPlayer
 var muzzle_flash: OmniLight3D
 var shot_audio: AudioStreamPlayer
 var reload_audio: AudioStreamPlayer
+var body_collision: CollisionShape3D
+var capsule_shape: CapsuleShape3D
 
 var anim_idle := ""
 var anim_walk := ""
@@ -47,24 +63,25 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func _build_collision() -> void:
-	var capsule := CollisionShape3D.new()
-	var shape := CapsuleShape3D.new()
-	shape.radius = 0.38
-	shape.height = 1.8
-	capsule.shape = shape
-	capsule.position.y = 0.9
-	add_child(capsule)
+	body_collision = CollisionShape3D.new()
+	body_collision.name = "PlayerCollision"
+	capsule_shape = CapsuleShape3D.new()
+	capsule_shape.radius = 0.38
+	capsule_shape.height = 1.8
+	body_collision.shape = capsule_shape
+	body_collision.position.y = 0.9
+	add_child(body_collision)
 
 func _build_camera() -> void:
 	view_pivot = Node3D.new()
 	view_pivot.name = "View"
-	view_pivot.position.y = 1.55
+	view_pivot.position.y = STANDING_EYE_HEIGHT
 	add_child(view_pivot)
 
 	camera = Camera3D.new()
 	camera.name = "Camera"
 	camera.current = true
-	camera.fov = 82.0
+	camera.fov = BASE_FOV
 	camera.near = 0.02
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT
 	view_pivot.add_child(camera)
@@ -72,7 +89,7 @@ func _build_camera() -> void:
 func _build_viewmodel() -> void:
 	viewmodel_mount = Node3D.new()
 	viewmodel_mount.name = "ViewmodelMount"
-	viewmodel_mount.position = VIEWMODEL_POSITION
+	viewmodel_mount.position = VIEWMODEL_HIP_POSITION
 	camera.add_child(viewmodel_mount)
 
 	var packed := load(VIEWMODEL_PATH) as PackedScene
@@ -175,42 +192,80 @@ func _on_animation_finished(name: StringName) -> void:
 
 func _process(delta: float) -> void:
 	shot_cooldown = maxf(0.0, shot_cooldown - delta)
+	weapon_kick = move_toward(weapon_kick, 0.0, delta * 0.22)
+
 	if reloading:
 		reload_timer -= delta
 		if reload_timer <= 0.0:
 			_finish_reload()
+
+	var target_fov := ADS_FOV if aiming else BASE_FOV
+	camera.fov = lerpf(camera.fov, target_fov, clampf(delta * 10.0, 0.0, 1.0))
+
+	var eye_height := CROUCH_EYE_HEIGHT if crouched else STANDING_EYE_HEIGHT
+	view_pivot.position.y = lerpf(view_pivot.position.y, eye_height, clampf(delta * 12.0, 0.0, 1.0))
+
+	_update_viewmodel(delta)
 	_play_locomotion()
+
 	if Input.is_action_just_pressed("reload"):
 		reload()
 	if Input.is_action_just_pressed("fire"):
 		request_fire()
+	if Input.is_action_just_pressed("jump"):
+		request_jump()
+	if Input.is_action_just_pressed("crouch"):
+		toggle_crouch()
+	if Input.is_action_just_pressed("aim"):
+		set_aiming(not aiming)
+
+func _update_viewmodel(delta: float) -> void:
+	if viewmodel_mount == null:
+		return
+
+	var target := VIEWMODEL_ADS_POSITION if aiming else VIEWMODEL_HIP_POSITION
+	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var move_amount := clampf(horizontal_speed / WALK_SPEED, 0.0, 1.0)
+
+	if move_amount > 0.05 and is_on_floor():
+		walk_bob_time += delta * (6.0 if aiming else 8.0)
+
+	if not aiming and not reloading:
+		target.x += sin(walk_bob_time) * 0.0035 * move_amount
+		target.y += abs(cos(walk_bob_time * 2.0)) * 0.0025 * move_amount
+
+	target.z += weapon_kick
+	viewmodel_mount.position = viewmodel_mount.position.lerp(target, clampf(delta * 14.0, 0.0, 1.0))
 
 func _physics_process(delta: float) -> void:
 	var input_vec := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	if touch_move.length() > 0.08:
 		input_vec = touch_move
+
 	var forward := -global_transform.basis.z
 	var right := global_transform.basis.x
 	var direction := (right * input_vec.x + forward * -input_vec.y).normalized()
-	velocity.x = direction.x * WALK_SPEED
-	velocity.z = direction.z * WALK_SPEED
+	var move_speed := CROUCH_SPEED if crouched else WALK_SPEED
+	velocity.x = direction.x * move_speed
+	velocity.z = direction.z * move_speed
 
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
-	else:
+	elif velocity.y < 0.0:
 		velocity.y = -0.2
 
 	move_and_slide()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_apply_look(event.relative * 0.0022)
+		_apply_look(event.relative * LOOK_SENSITIVITY)
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _apply_look(delta_value: Vector2) -> void:
-	rotate_y(-delta_value.x)
-	pitch = clampf(pitch - delta_value.y, -1.25, 1.25)
+	var multiplier := ADS_LOOK_MULTIPLIER if aiming else 1.0
+	rotate_y(-delta_value.x * multiplier)
+	pitch = clampf(pitch - delta_value.y * multiplier, -1.25, 1.25)
 	view_pivot.rotation.x = pitch
 
 func set_touch_move(value: Vector2) -> void:
@@ -218,6 +273,25 @@ func set_touch_move(value: Vector2) -> void:
 
 func add_touch_look(value: Vector2) -> void:
 	_apply_look(value)
+
+func set_aiming(active: bool) -> void:
+	aiming = active
+
+func toggle_crouch() -> void:
+	crouched = not crouched
+	if capsule_shape != null and body_collision != null:
+		if crouched:
+			capsule_shape.height = 1.24
+			body_collision.position.y = 0.62
+		else:
+			capsule_shape.height = 1.8
+			body_collision.position.y = 0.9
+
+func request_jump() -> void:
+	if crouched:
+		return
+	if is_on_floor():
+		velocity.y = JUMP_VELOCITY
 
 func request_fire() -> void:
 	if reloading or shot_cooldown > 0.0:
@@ -228,27 +302,33 @@ func request_fire() -> void:
 
 	magazine -= 1
 	shot_cooldown = SHOT_INTERVAL
+	weapon_kick = 0.018 if aiming else 0.028
 	animation_locked = true
 	_play_animation(anim_fire, 0.02, 1.0, true)
+
 	if shot_audio != null:
 		shot_audio.pitch_scale = randf_range(0.985, 1.015)
 		shot_audio.play()
+
 	if muzzle_flash != null:
 		muzzle_flash.light_energy = 2.0
 		get_tree().create_timer(0.045).timeout.connect(func():
 			if is_instance_valid(muzzle_flash):
 				muzzle_flash.light_energy = 0.0
 		)
+
 	emit_ammo()
 
 func reload() -> void:
 	if reloading or magazine >= MAGAZINE_SIZE or reserve_ammo <= 0:
 		return
+
 	reloading = true
 	var length := _animation_length(anim_reload)
 	reload_timer = length if length > 0.5 else DEFAULT_RELOAD_SECONDS
 	animation_locked = true
 	_play_animation(anim_reload, 0.08, 1.0, true)
+
 	if reload_audio != null:
 		reload_audio.play()
 

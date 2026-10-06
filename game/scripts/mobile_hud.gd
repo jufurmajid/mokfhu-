@@ -8,10 +8,11 @@ signal aim_changed(active: bool)
 signal move_changed(value: Vector2)
 signal look_delta(value: Vector2)
 
-signal tune_axis_requested(axis_name: String, amount: float)
-signal tune_scale_requested(amount: float)
-signal tune_fov_requested(amount: float)
-signal tune_reset_requested
+signal tuning_mode_changed(active: bool)
+signal tuning_axis_requested(axis_name: String, amount: float)
+signal tuning_scale_requested(amount: float)
+signal tuning_fov_requested(amount: float)
+signal tuning_reset_requested
 
 const FIRE_REPEAT := 0.105
 const JOYSTICK_RADIUS := 68.0
@@ -477,18 +478,19 @@ func _on_reload_pressed() -> void:
 func _toggle_tuning_panel() -> void:
 	tuning_panel.visible = not tuning_panel.visible
 	tuning_toggle_button.text = "إخفاء الضبط" if tuning_panel.visible else "إظهار الضبط"
+	tuning_mode_changed.emit(tuning_panel.visible)
 
 func _on_tune_axis_pressed(axis_name: String, amount: float) -> void:
-	tune_axis_requested.emit(axis_name, amount)
+	tuning_axis_requested.emit(axis_name, amount)
 
 func _on_tune_scale_pressed(amount: float) -> void:
-	tune_scale_requested.emit(amount)
+	tuning_scale_requested.emit(amount)
 
 func _on_tune_fov_pressed(amount: float) -> void:
-	tune_fov_requested.emit(amount)
+	tuning_fov_requested.emit(amount)
 
 func _on_tune_reset_pressed() -> void:
-	tune_reset_requested.emit()
+	tuning_reset_requested.emit()
 
 func set_tuning_values(position: Vector3, scale_value: float, fov_value: float) -> void:
 	tuning_text = "X=%.3f Y=%.3f Z=%.3f | SCALE=%.3f | FOV=%.1f" % [

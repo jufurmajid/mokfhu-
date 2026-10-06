@@ -1,6 +1,7 @@
 extends CharacterBody3D
 
 signal ammo_changed(current: int, reserve: int)
+signal viewmodel_tuning_changed(position: Vector3, scale: float, fov: float)
 
 const GRAVITY := 18.0
 const WALK_SPEED := 5.0
@@ -38,6 +39,11 @@ var aiming := false
 var crouched := false
 var walk_bob_time := 0.0
 var weapon_kick := 0.0
+var tuning_mode := false
+var tuned_hip_position: Vector3 = VIEWMODEL_HIP_POSITION
+var tuned_ads_position: Vector3 = VIEWMODEL_ADS_POSITION
+var tuned_scale: float = VIEWMODEL_SCALE
+var tuned_fov: float = BASE_FOV
 
 var camera: Camera3D
 var view_pivot: Node3D
@@ -61,6 +67,7 @@ func _ready() -> void:
 	_build_viewmodel()
 	_build_audio()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	call_deferred("emit_tuning_state")
 
 func _build_collision() -> void:
 	body_collision = CollisionShape3D.new()
@@ -81,7 +88,7 @@ func _build_camera() -> void:
 	camera = Camera3D.new()
 	camera.name = "Camera"
 	camera.current = true
-	camera.fov = BASE_FOV
+	camera.fov = tuned_fov
 	camera.near = 0.02
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT
 	view_pivot.add_child(camera)
@@ -89,7 +96,7 @@ func _build_camera() -> void:
 func _build_viewmodel() -> void:
 	viewmodel_mount = Node3D.new()
 	viewmodel_mount.name = "ViewmodelMount"
-	viewmodel_mount.position = VIEWMODEL_HIP_POSITION
+	viewmodel_mount.position = tuned_hip_position
 	camera.add_child(viewmodel_mount)
 
 	var packed := load(VIEWMODEL_PATH) as PackedScene
@@ -101,7 +108,7 @@ func _build_viewmodel() -> void:
 		push_error("MOKFHU_FATAL: AK hands viewmodel could not instantiate")
 		return
 	viewmodel.name = "FPS_AK74M_Arms"
-	viewmodel.scale = Vector3.ONE * VIEWMODEL_SCALE
+	viewmodel.scale = Vector3.ONE * tuned_scale
 	viewmodel.rotation_degrees = VIEWMODEL_ROTATION_DEGREES
 	viewmodel_mount.add_child(viewmodel)
 
@@ -199,7 +206,7 @@ func _process(delta: float) -> void:
 		if reload_timer <= 0.0:
 			_finish_reload()
 
-	var target_fov := ADS_FOV if aiming else BASE_FOV
+	var target_fov := ADS_FOV if aiming else tuned_fov
 	camera.fov = lerpf(camera.fov, target_fov, clampf(delta * 10.0, 0.0, 1.0))
 
 	var eye_height := CROUCH_EYE_HEIGHT if crouched else STANDING_EYE_HEIGHT
@@ -223,18 +230,19 @@ func _update_viewmodel(delta: float) -> void:
 	if viewmodel_mount == null:
 		return
 
-	var target := VIEWMODEL_ADS_POSITION if aiming else VIEWMODEL_HIP_POSITION
+	var target := tuned_ads_position if aiming else tuned_hip_position
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	var move_amount := clampf(horizontal_speed / WALK_SPEED, 0.0, 1.0)
 
 	if move_amount > 0.05 and is_on_floor():
 		walk_bob_time += delta * (6.0 if aiming else 8.0)
 
-	if not aiming and not reloading:
+	if not tuning_mode and not aiming and not reloading:
 		target.x += sin(walk_bob_time) * 0.0035 * move_amount
 		target.y += abs(cos(walk_bob_time * 2.0)) * 0.0025 * move_amount
 
-	target.z += weapon_kick
+	if not tuning_mode:
+		target.z += weapon_kick
 	viewmodel_mount.position = viewmodel_mount.position.lerp(target, clampf(delta * 14.0, 0.0, 1.0))
 
 func _physics_process(delta: float) -> void:
@@ -342,6 +350,71 @@ func _finish_reload() -> void:
 	animation_locked = false
 	emit_ammo()
 	_play_locomotion(true)
+
+func set_tuning_mode(active: bool) -> void:
+	tuning_mode = active
+	if active:
+		aiming = false
+		weapon_kick = 0.0
+		if viewmodel_mount != null:
+			viewmodel_mount.position = tuned_hip_position
+		if camera != null:
+			camera.fov = tuned_fov
+	emit_tuning_state()
+
+func adjust_viewmodel_axis(axis: String, amount: float) -> void:
+	var delta := Vector3.ZERO
+	match axis:
+		"x":
+			delta.x = amount
+		"y":
+			delta.y = amount
+		"z":
+			delta.z = amount
+		_:
+			return
+
+	tuned_hip_position += delta
+	tuned_ads_position += delta
+
+	tuned_hip_position.x = clampf(tuned_hip_position.x, -0.40, 0.55)
+	tuned_hip_position.y = clampf(tuned_hip_position.y, -0.55, 0.20)
+	tuned_hip_position.z = clampf(tuned_hip_position.z, -1.20, -0.16)
+	tuned_ads_position.x = clampf(tuned_ads_position.x, -0.45, 0.45)
+	tuned_ads_position.y = clampf(tuned_ads_position.y, -0.55, 0.20)
+	tuned_ads_position.z = clampf(tuned_ads_position.z, -1.20, -0.12)
+
+	if tuning_mode and viewmodel_mount != null:
+		viewmodel_mount.position = tuned_hip_position
+	emit_tuning_state()
+
+func adjust_viewmodel_scale(amount: float) -> void:
+	tuned_scale = clampf(tuned_scale + amount, 0.08, 0.30)
+	if viewmodel != null:
+		viewmodel.scale = Vector3.ONE * tuned_scale
+	emit_tuning_state()
+
+func adjust_camera_fov(amount: float) -> void:
+	tuned_fov = clampf(tuned_fov + amount, 60.0, 100.0)
+	if camera != null and not aiming:
+		camera.fov = tuned_fov
+	emit_tuning_state()
+
+func reset_viewmodel_tuning() -> void:
+	tuned_hip_position = VIEWMODEL_HIP_POSITION
+	tuned_ads_position = VIEWMODEL_ADS_POSITION
+	tuned_scale = VIEWMODEL_SCALE
+	tuned_fov = BASE_FOV
+	if viewmodel != null:
+		viewmodel.scale = Vector3.ONE * tuned_scale
+	if viewmodel_mount != null:
+		viewmodel_mount.position = tuned_hip_position
+	if camera != null and not aiming:
+		camera.fov = tuned_fov
+	emit_tuning_state()
+
+func emit_tuning_state() -> void:
+	viewmodel_tuning_changed.emit(tuned_hip_position, tuned_scale, tuned_fov)
 
 func emit_ammo() -> void:
 	ammo_changed.emit(magazine, reserve_ammo)

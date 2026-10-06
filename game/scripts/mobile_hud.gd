@@ -8,6 +8,12 @@ signal aim_changed(active: bool)
 signal move_changed(value: Vector2)
 signal look_delta(value: Vector2)
 
+signal tuning_mode_changed(active: bool)
+signal tuning_axis_requested(axis: String, amount: float)
+signal tuning_scale_requested(amount: float)
+signal tuning_fov_requested(amount: float)
+signal tuning_reset_requested
+
 const FIRE_REPEAT := 0.105
 const JOYSTICK_RADIUS := 68.0
 const SAFE_MARGIN := 22.0
@@ -23,6 +29,12 @@ var crouch_button: Button
 var jump_button: Button
 var joystick_base: Panel
 var joystick_knob: Panel
+
+var tuning_toggle_button: Button
+var tuning_panel: Panel
+var tuning_label: Label
+var tuning_buttons: Array[Button] = []
+var tuning_active := false
 
 var move_origin := Vector2.ZERO
 var move_touch := -1
@@ -146,6 +158,80 @@ func _build_ui() -> void:
 	joystick_knob.add_theme_stylebox_override("panel", knob_style)
 	joystick_base.add_child(joystick_knob)
 
+	_build_tuning_ui()
+
+func _build_tuning_ui() -> void:
+	tuning_toggle_button = _make_tune_button("ضبط السلاح")
+	tuning_toggle_button.name = "TuningToggle"
+	tuning_toggle_button.toggle_mode = true
+	tuning_toggle_button.toggled.connect(_on_tuning_toggled)
+	root.add_child(tuning_toggle_button)
+
+	tuning_panel = Panel.new()
+	tuning_panel.name = "TuningPanel"
+	tuning_panel.visible = false
+	tuning_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var tune_style := StyleBoxFlat.new()
+	tune_style.bg_color = Color(0.015, 0.018, 0.02, 0.86)
+	tune_style.border_color = Color(1, 1, 1, 0.22)
+	tune_style.set_border_width_all(1)
+	tune_style.set_corner_radius_all(10)
+	tuning_panel.add_theme_stylebox_override("panel", tune_style)
+	root.add_child(tuning_panel)
+
+	tuning_label = Label.new()
+	tuning_label.name = "TuningCoordinates"
+	tuning_label.text = "X: 0.160   Y: -0.180\nZ: -0.560   Scale: 0.155\nFOV: 78.0"
+	tuning_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tuning_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	tuning_label.add_theme_font_size_override("font_size", 15)
+	tuning_label.add_theme_color_override("font_color", Color("fff2cf"))
+	tuning_panel.add_child(tuning_label)
+
+	_add_tune_axis_button("يسار", 0, 0, "x", -0.01)
+	_add_tune_axis_button("يمين", 0, 1, "x", 0.01)
+	_add_tune_axis_button("فوك", 1, 0, "y", 0.01)
+	_add_tune_axis_button("جوه", 1, 1, "y", -0.01)
+	_add_tune_axis_button("قرب", 2, 0, "z", 0.02)
+	_add_tune_axis_button("بعد", 2, 1, "z", -0.02)
+	_add_tune_scale_button("كبر", 3, 0, 0.005)
+	_add_tune_scale_button("صغر", 3, 1, -0.005)
+	_add_tune_fov_button("FOV -", 4, 0, -1.0)
+	_add_tune_fov_button("FOV +", 4, 1, 1.0)
+
+	var reset_button := _make_tune_button("إرجاع الافتراضي")
+	reset_button.name = "TuneReset"
+	reset_button.set_meta("tune_row", 5)
+	reset_button.set_meta("tune_col", 0)
+	reset_button.set_meta("tune_wide", true)
+	reset_button.pressed.connect(func(): tuning_reset_requested.emit())
+	tuning_panel.add_child(reset_button)
+	tuning_buttons.append(reset_button)
+
+func _add_tune_axis_button(caption: String, row: int, column: int, axis: String, amount: float) -> void:
+	var button := _make_tune_button(caption)
+	button.set_meta("tune_row", row)
+	button.set_meta("tune_col", column)
+	button.pressed.connect(_on_tune_axis.bind(axis, amount))
+	tuning_panel.add_child(button)
+	tuning_buttons.append(button)
+
+func _add_tune_scale_button(caption: String, row: int, column: int, amount: float) -> void:
+	var button := _make_tune_button(caption)
+	button.set_meta("tune_row", row)
+	button.set_meta("tune_col", column)
+	button.pressed.connect(_on_tune_scale.bind(amount))
+	tuning_panel.add_child(button)
+	tuning_buttons.append(button)
+
+func _add_tune_fov_button(caption: String, row: int, column: int, amount: float) -> void:
+	var button := _make_tune_button(caption)
+	button.set_meta("tune_row", row)
+	button.set_meta("tune_col", column)
+	button.pressed.connect(_on_tune_fov.bind(amount))
+	tuning_panel.add_child(button)
+	tuning_buttons.append(button)
+
 func _make_round_button(caption: String, font_size: int, alpha: float) -> Button:
 	var button := Button.new()
 	button.text = caption
@@ -172,6 +258,30 @@ func _make_round_button(caption: String, font_size: int, alpha: float) -> Button
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("hover_pressed", pressed)
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	return button
+
+func _make_tune_button(caption: String) -> Button:
+	var button := Button.new()
+	button.text = caption
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 14)
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color.WHITE)
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.10, 0.115, 0.12, 0.90)
+	normal.border_color = Color(1, 1, 1, 0.18)
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(7)
+
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.28, 0.31, 0.31, 0.96)
+	pressed.border_color = Color(1, 1, 1, 0.48)
+
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", normal)
+	button.add_theme_stylebox_override("pressed", pressed)
 	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	return button
 
@@ -238,6 +348,35 @@ func _layout_controls() -> void:
 	joystick_knob.size = Vector2(knob_size, knob_size)
 	_reset_knob()
 
+	_layout_tuning(ui_scale)
+
+func _layout_tuning(ui_scale: float) -> void:
+	tuning_toggle_button.position = Vector2(18, 18) * ui_scale
+	tuning_toggle_button.size = Vector2(122, 42) * ui_scale
+	tuning_toggle_button.add_theme_font_size_override("font_size", int(14.0 * ui_scale))
+
+	tuning_panel.position = Vector2(18, 68) * ui_scale
+	tuning_panel.size = Vector2(312, 294) * ui_scale
+
+	tuning_label.position = Vector2(10, 8) * ui_scale
+	tuning_label.size = Vector2(292, 62) * ui_scale
+	tuning_label.add_theme_font_size_override("font_size", int(15.0 * ui_scale))
+
+	var button_width := 138.0 * ui_scale
+	var button_height := 32.0 * ui_scale
+	var left_x := 12.0 * ui_scale
+	var right_x := 162.0 * ui_scale
+	var row_start := 74.0 * ui_scale
+	var row_step := 36.0 * ui_scale
+
+	for button in tuning_buttons:
+		var row := int(button.get_meta("tune_row", 0))
+		var column := int(button.get_meta("tune_col", 0))
+		var wide := bool(button.get_meta("tune_wide", false))
+		button.position = Vector2(left_x if column == 0 else right_x, row_start + row_step * row)
+		button.size = Vector2(288.0 * ui_scale if wide else button_width, button_height)
+		button.add_theme_font_size_override("font_size", int(13.0 * ui_scale))
+
 func _input(event: InputEvent) -> void:
 	var size := get_viewport().get_visible_rect().size
 
@@ -275,9 +414,11 @@ func _update_joystick(point: Vector2) -> void:
 	move_changed.emit(clamped)
 
 func _point_hits_action(point: Vector2) -> bool:
-	for control in [fire_button, reload_button, aim_button, crouch_button, jump_button]:
+	for control in [fire_button, reload_button, aim_button, crouch_button, jump_button, tuning_toggle_button]:
 		if control != null and control.get_global_rect().has_point(point):
 			return true
+	if tuning_active and tuning_panel != null and tuning_panel.get_global_rect().has_point(point):
+		return true
 	return false
 
 func _reset_knob() -> void:
@@ -293,6 +434,32 @@ func _stop_fire() -> void:
 
 func _on_aim_toggled(active: bool) -> void:
 	aim_changed.emit(active)
+
+func _on_tuning_toggled(active: bool) -> void:
+	tuning_active = active
+	tuning_panel.visible = active
+	if active and aim_button != null and aim_button.button_pressed:
+		aim_button.button_pressed = false
+	tuning_mode_changed.emit(active)
+
+func _on_tune_axis(axis: String, amount: float) -> void:
+	tuning_axis_requested.emit(axis, amount)
+
+func _on_tune_scale(amount: float) -> void:
+	tuning_scale_requested.emit(amount)
+
+func _on_tune_fov(amount: float) -> void:
+	tuning_fov_requested.emit(amount)
+
+func set_tuning_values(position: Vector3, scale_value: float, fov_value: float) -> void:
+	if tuning_label != null:
+		tuning_label.text = "X: %.3f   Y: %.3f\nZ: %.3f   Scale: %.3f\nFOV: %.1f" % [
+			position.x,
+			position.y,
+			position.z,
+			scale_value,
+			fov_value
+		]
 
 func set_ammo(current: int, reserve: int) -> void:
 	if ammo_label != null:

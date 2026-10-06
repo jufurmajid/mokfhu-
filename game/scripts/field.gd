@@ -114,5 +114,13 @@ func _build_player_and_controls() -> void:
 	hud.crouch_requested.connect(player.toggle_crouch)
 	hud.aim_changed.connect(player.set_aiming)
 
+	hud.tuning_mode_changed.connect(player.set_tuning_mode)
+	hud.tuning_axis_requested.connect(player.adjust_viewmodel_axis)
+	hud.tuning_scale_requested.connect(player.adjust_viewmodel_scale)
+	hud.tuning_fov_requested.connect(player.adjust_camera_fov)
+	hud.tuning_reset_requested.connect(player.reset_viewmodel_tuning)
+
 	player.ammo_changed.connect(hud.set_ammo)
+	player.viewmodel_tuning_changed.connect(hud.set_tuning_values)
 	player.emit_ammo()
+	player.emit_tuning_state()

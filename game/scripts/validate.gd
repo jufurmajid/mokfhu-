@@ -87,6 +87,21 @@ func _run() -> void:
 			failures += _fail("ADS toggle did not enable aiming")
 		player.call("set_aiming", false)
 
+		var before_tune: Vector3 = player.get("tuned_hip_position")
+		player.call("set_tuning_mode", true)
+		player.call("adjust_viewmodel_axis", "z", 0.02)
+		var after_tune: Vector3 = player.get("tuned_hip_position")
+		if absf((after_tune.z - before_tune.z) - 0.02) > 0.001:
+			failures += _fail("viewmodel Z tuning did not apply")
+		player.call("adjust_viewmodel_scale", 0.005)
+		if float(player.get("tuned_scale")) <= 0.155:
+			failures += _fail("viewmodel scale tuning did not apply")
+		player.call("adjust_camera_fov", 1.0)
+		if float(player.get("tuned_fov")) <= 78.0:
+			failures += _fail("camera FOV tuning did not apply")
+		player.call("reset_viewmodel_tuning")
+		player.call("set_tuning_mode", false)
+
 		player.call("toggle_crouch")
 		if not bool(player.get("crouched")):
 			failures += _fail("crouch toggle did not enable crouch")
@@ -109,14 +124,17 @@ func _run() -> void:
 			"joystick_base",
 			"joystick_knob",
 			"weapon_panel",
-			"ammo_label"
+			"ammo_label",
+			"tuning_toggle_button",
+			"tuning_panel",
+			"tuning_label"
 		]
 		for control_name in required_controls:
 			if hud.get(control_name) == null:
 				failures += _fail("HUD control missing: %s" % control_name)
 
 		var viewport_size := root.get_visible_rect().size
-		for control_name in ["fire_button", "reload_button", "aim_button", "crouch_button", "jump_button", "joystick_base", "weapon_panel"]:
+		for control_name in ["fire_button", "reload_button", "aim_button", "crouch_button", "jump_button", "joystick_base", "weapon_panel", "tuning_toggle_button"]:
 			var control := hud.get(control_name) as Control
 			if not _inside_viewport(control, viewport_size):
 				failures += _fail("HUD control is outside 1280x720 safe area: %s" % control_name)
@@ -127,6 +145,13 @@ func _run() -> void:
 			failures += _fail("fire button is not on the right side")
 		if joystick != null and joystick.get_global_rect().get_center().x > viewport_size.x * 0.35:
 			failures += _fail("movement joystick is not on the left side")
+
+		var tune_buttons: Array = hud.get("tuning_buttons")
+		if tune_buttons.size() < 11:
+			failures += _fail("camera tuning panel does not have all adjustment buttons")
+		var tune_label := hud.get("tuning_label") as Label
+		if tune_label == null or not tune_label.text.contains("X:") or not tune_label.text.contains("Z:"):
+			failures += _fail("camera tuning coordinates are not visible")
 
 	field.queue_free()
 	await process_frame
